@@ -92,10 +92,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CSharp6SyntaxRewriter.cs" />
+    <Compile Include="ProjectProcessor.cs" />
     <Compile Include="SyntaxRewriter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="RoslynHelpers.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
