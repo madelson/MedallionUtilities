@@ -6,16 +6,20 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Text.RegularExpressions;
 
 namespace Medallion.Tools
 {
     internal class SyntaxRewriter : CSharpSyntaxRewriter
     {
-        private readonly string conditionalCompilationSymbolBaseName;
+        private readonly string conditionalCompilationSymbolBaseName, baseNamespace;
 
-        public SyntaxRewriter(string conditionalCompilationSymbolBaseName)
+        public SyntaxRewriter(
+            string conditionalCompilationSymbolBaseName,
+            string baseNamespace)
         {
             this.conditionalCompilationSymbolBaseName = conditionalCompilationSymbolBaseName;
+            this.baseNamespace = baseNamespace;
         }
 
         #region ---- Type Declarations ---
@@ -106,6 +110,31 @@ namespace Medallion.Tools
             }
 
             return base.VisitParameter(updated);
+        }
+        #endregion
+
+        #region ---- Namespace ----
+        public override SyntaxNode VisitNamespaceDeclaration(NamespaceDeclarationSyntax node)
+        {
+            var @namespace = Regex.Replace(node.Name.ToFullString(), @"\s+", string.Empty);
+            NamespaceDeclarationSyntax updated;
+            if (@namespace.StartsWith(this.baseNamespace, StringComparison.Ordinal))
+            {
+                var name = SyntaxFactory.ParseName($@"
+                    #if {this.conditionalCompilationSymbolBaseName}_USE_LOCAL_NAMESPACE
+                        $rootnamespace${@namespace.Substring(this.baseNamespace.Length)}
+                    #else
+                        {node.Name.ToFullString()}
+                ");
+                name = name.WithTrailingTrivia(name.GetTrailingTrivia().AddRange(SyntaxFactory.ParseTrailingTrivia("#endif\r\n")));
+                updated = node.WithName(name);
+            }
+            else
+            {
+                updated = node;
+            }
+
+            return base.VisitNamespaceDeclaration(updated);
         }
         #endregion
     }

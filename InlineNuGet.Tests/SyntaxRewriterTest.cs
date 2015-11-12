@@ -25,7 +25,7 @@ namespace Medallion.Tools.InlineNuGet.Tests
         public void RewriteTest()
         {
             var syntax = SyntaxFactory.ParseCompilationUnit(@"
-namespace Foo {
+namespace Foo.Tests {
     public static class Bar 
     {
         public static void Print<T>(this T @this) { }
@@ -33,7 +33,7 @@ namespace Foo {
 
     internal interface Baz { }
 }");
-            var rewriter = new SyntaxRewriter("LIB");
+            var rewriter = new SyntaxRewriter("LIB", "Foo");
             var rewritten = rewriter.Visit(syntax);
 
             this.output.WriteLine(Microsoft.CodeAnalysis.Formatting.Formatter.Format(rewritten, new AdhocWorkspace()).ToFullString());
