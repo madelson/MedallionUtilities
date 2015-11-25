@@ -85,6 +85,140 @@ namespace Medallion.Async
 
             return taskCompletionSource;
         }
+
+        public static TaskCompletionSource<TResult> CompleteWith<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, Task<TResult> task)
+        {
+            return taskCompletionSource.InternalCompleteWith(task, (t, _) => t.Result, resultFactoryState: null, continuationOptions: TaskContinuationOptions.ExecuteSynchronously);
+        }
+
+        public static TaskCompletionSource<TResult> CompleteWith<TResult, TTaskResult>(this TaskCompletionSource<TResult> taskCompletionSource, Task<TTaskResult> task, Func<TTaskResult, TResult> resultFactory)
+        {
+            Throw.IfNull(resultFactory, nameof(resultFactory));
+
+            return taskCompletionSource.InternalCompleteWith(task, (t, state) => ((Func<TTaskResult, TResult>)state)(t.Result), resultFactoryState: resultFactory);
+        }
+
+        public static TaskCompletionSource<TResult> CompleteWith<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, Task task, Func<TResult> resultFactory = null)
+        {
+            var continuationOptions = resultFactory == null 
+                ? TaskContinuationOptions.ExecuteSynchronously 
+                : TaskContinuationOptions.None;
+            return taskCompletionSource.InternalCompleteWith(task, (_, state) => state != null ? ((Func<TResult>)state)() : default(TResult), resultFactoryState: resultFactory, continuationOptions: continuationOptions);
+        }
+
+        private static TaskCompletionSource<TResult> InternalCompleteWith<TResult, TTask>(
+            this TaskCompletionSource<TResult> taskCompletionSource, 
+            TTask task, 
+            Func<TTask, object, TResult> resultFactory, 
+            object resultFactoryState,
+            CancellationToken cancellationToken = default(CancellationToken),
+            TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
+            TaskScheduler scheduler = null)
+            where TTask : Task
+        {
+            Throw.IfNull(taskCompletionSource, nameof(taskCompletionSource));
+            Throw.IfNull(task, nameof(task));
+
+            task.ContinueWith(
+                (t, state) =>
+                {
+                    var tupleState = (Tuple<TaskCompletionSource<TResult>, Func<TTask, object, TResult>, object>)state;
+                    if (t.IsFaulted)
+                    {
+                        tupleState.Item1.TrySetException(t.Exception.InnerExceptions);
+                    }
+                    else if (t.IsCanceled)
+                    {
+                        tupleState.Item1.TrySetCanceled();
+                    }
+                    else
+                    {
+                        tupleState.Item1.TrySetResult(tupleState.Item2((TTask)t, tupleState.Item3));
+                    }
+                },
+                state: Tuple.Create(taskCompletionSource, resultFactory, resultFactoryState),
+                cancellationToken: cancellationToken,
+                continuationOptions: continuationOptions,
+                scheduler: scheduler ?? TaskScheduler.Default
+            );
+
+            return taskCompletionSource;
+        }
+        #endregion
+
+        #region ---- Then ----
+        public static Task Then(
+            this Task task, 
+            Action continuationAction, 
+            CancellationToken cancellationToken = default(CancellationToken),
+            TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
+            TaskScheduler scheduler = null)
+        {
+            Throw.IfNull(continuationAction, nameof(continuationAction));
+
+            return new TaskCompletionSource<bool>()
+                .InternalCompleteWith(
+                    task, 
+                    (_, state) => { ((Action)state)(); return true; }, 
+                    resultFactoryState: continuationAction,
+                    cancellationToken: cancellationToken,
+                    continuationOptions: continuationOptions,
+                    scheduler: scheduler
+                )
+                .Task;
+        }
+
+        public static Task<TResult> Then<TResult>(
+            this Task task, 
+            Func<TResult> continuationFunction,
+            CancellationToken cancellationToken = default(CancellationToken),
+            TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
+            TaskScheduler scheduler = null)
+        {
+            Throw.IfNull(continuationFunction, nameof(continuationFunction));
+
+            // TODO creates an extraneous task
+            return new TaskCompletionSource<TResult>()
+                .InternalCompleteWith(
+                    task, 
+                    (_, state) => ((Func<TResult>)state)(), 
+                    resultFactoryState: continuationFunction,
+                    cancellationToken: cancellationToken,
+                    continuationOptions: continuationOptions,
+                    scheduler: scheduler
+                )
+                .Task;
+        }
+
+        public static Task Then<TResult>(
+            this Task<TResult> task, 
+            Action<TResult> continuationAction,
+            CancellationToken cancellationToken = default(CancellationToken),
+            TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
+            TaskScheduler scheduler = null)
+        {
+            Throw.IfNull(continuationAction, nameof(continuationAction));
+
+            return new TaskCompletionSource<bool>()
+                .InternalCompleteWith(
+                    task, 
+                    (t, state) => { ((Action<TResult>)state)(t.Result); return true; }, 
+                    resultFactoryState: continuationAction,
+                    cancellationToken: cancellationToken,
+                    continuationOptions: continuationOptions,
+                    scheduler: scheduler
+                )
+                .Task;
+        }
+
+        public static Task Then<TTaskResult, TContinuationResult>(this Task<TTaskResult> task, Func<TTaskResult, TContinuationResult> continuationFunction)
+        {
+            Throw.IfNull(continuationFunction, nameof(continuationFunction));
+
+            return new TaskCompletionSource<TContinuationResult>()
+                .InternalCompleteWith(task, (t, state) => ((Func<TTaskResult, TContinuationResult>)state)(t.Result), resultFactoryState: continuationFunction)
+                .Task;
+        }
         #endregion
 
         #region ---- Process ----

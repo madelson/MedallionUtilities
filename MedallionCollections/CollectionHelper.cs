@@ -8,6 +8,58 @@ namespace Medallion.Collections
 {
     public static class CollectionHelper
     {
+        #region ---- Partition ----
+        public static IEnumerable<List<T>> Partition<T>(this IEnumerable<T> source, int partitionSize)
+        {
+            Throw.IfNull(source, nameof(source));
+            Throw.IfOutOfRange(partitionSize, nameof(partitionSize), min: 1);
+
+            return PartitionIterator(source, partitionSize);
+        }
+
+        private static IEnumerable<List<T>> PartitionIterator<T>(this IEnumerable<T> source, int partitionSize)
+        {
+            // we like initializing our lists with capacity to avoid resizes. However, we don't want to trigger
+            // OutOfMemory if the partition size is huge
+            var initialCapacity = Math.Max(partitionSize, 1024);
+
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    var partition = new List<T>(capacity: initialCapacity) { enumerator.Current };
+                    for (var i = 1; i < partitionSize && enumerator.MoveNext(); ++i)
+                    {
+                        partition.Add(enumerator.Current);
+                    }
+                    yield return partition;
+                }
+            }
+        }
+        #endregion
+
+        #region ---- AtLeast / AtMost ----
+        public static bool HasAtLeast<T>(this IEnumerable<T> source, int count)
+        {
+            Throw.IfNull(source, nameof(source));
+            Throw.IfOutOfRange(count, nameof(count), min: 0);
+
+            return source.Take(count).Count() == count;
+        }
+
+        public static bool HasAtMost<T>(this IEnumerable<T> source, int count)
+        {
+            Throw.IfNull(source, nameof(source));
+            Throw.IfOutOfRange(count, nameof(count), min: 0, max: int.MaxValue - 1);
+            // todo tryfastcount
+            return source.Take(count + 1).Count() <= count;
+        }
+        #endregion
+
+        // ideas:
+        // start with sequence compare
+        // could revert to sequence compare when dictionary is balanced
+        // could build dictionary inline & remove zeros
         public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
         {
             Throw.IfNull(@this, "this");
@@ -65,7 +117,7 @@ namespace Medallion.Collections
                     }
                 }
 
-                var dictionary = new Dictionary<TElement, int>();
+                var dictionary = new Dictionary<TElement, int>(cmp);
                 do
                 {
                     var thisValue = thisEnumerator.Current;

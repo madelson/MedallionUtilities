@@ -4,14 +4,13 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{DCB5056D-D977-4A16-AE8C-B920BDD0E5C7}</ProjectGuid>
+    <ProjectGuid>{3D92F2AE-317D-490C-8285-1BDD93A7A0F2}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Medallion.Async</RootNamespace>
-    <AssemblyName>MedallionAsync</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <RootNamespace>Medallion.Random</RootNamespace>
+    <AssemblyName>MedallionRandom</AssemblyName>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,8 +20,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Debug\MedallionAsync.XML</DocumentationFile>
-    <LangVersion>default</LangVersion>
+    <DocumentationFile>bin\Debug\MedallionRandom.XML</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -43,9 +41,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Async.cs" />
-    <Compile Include="Cancel.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Rand.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ThrowIf\ThrowIf.csproj">

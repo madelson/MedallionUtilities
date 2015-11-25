@@ -10,6 +10,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Medallion.Tools
 {
     // TODO new prop types (more annoying)
+    // TODO ?. syntax and related (more annoying)
 
     internal class CSharp6SyntaxRewriter : CSharpSyntaxRewriter
     {

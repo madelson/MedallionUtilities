@@ -40,7 +40,7 @@ namespace Medallion.Collections
             {
                 return obj == null ? 0 // consistent with GetHashCode(object)
                     : this.hash == null ? -1
-                    : this.hash(obj); 
+                    : this.hash(obj);
             }
         }
         #endregion
@@ -58,7 +58,7 @@ namespace Medallion.Collections
         }
         #endregion
 
-        #region ---- ReferenceComparer ----
+        #region ---- Reference Comparer ----
         public static EqualityComparer<T> GetReferenceComparer<T>()
             where T : class
         {
@@ -79,6 +79,96 @@ namespace Medallion.Collections
             {
                 // handles nulls
                 return RuntimeHelpers.GetHashCode(obj);
+            }
+        }
+        #endregion
+
+        #region ---- Collection Comparer ----
+        public static EqualityComparer<IEnumerable<TElement>> GetCollectionComparer<TElement>(IEqualityComparer<TElement> elementComparer = null)
+        {
+            return elementComparer == null || elementComparer == EqualityComparer<TElement>.Default
+                ? CollectionComparer<TElement>.DefaultInstance
+                : new CollectionComparer<TElement>(elementComparer);
+        }
+
+        private sealed class CollectionComparer<TElement> : EqualityComparer<IEnumerable<TElement>>
+        {
+            private static EqualityComparer<IEnumerable<TElement>> defaultInstance;
+            public static EqualityComparer<IEnumerable<TElement>> DefaultInstance
+            {
+                get
+                {
+                    return defaultInstance ?? (defaultInstance = new CollectionComparer<TElement>(EqualityComparer<TElement>.Default));
+                }
+            }
+
+            private readonly IEqualityComparer<TElement> elementComparer;
+
+            public CollectionComparer(IEqualityComparer<TElement> elementComparer)
+            {
+                this.elementComparer = elementComparer;
+            }
+
+            public override bool Equals(IEnumerable<TElement> x, IEnumerable<TElement> y)
+            {
+                return x.CollectionEquals(y, this.elementComparer);
+            }
+
+            public override int GetHashCode(IEnumerable<TElement> obj)
+            {
+                return obj != null
+                    ? obj.Aggregate(-1, (hash, element) => hash ^ this.elementComparer.GetHashCode(element))
+                    : 0;
+            }
+        }
+        #endregion
+
+        #region ---- Sequence Comparer ----
+        public static EqualityComparer<IEnumerable<TElement>> GetSequenceComparer<TElement>(IEqualityComparer<TElement> elementComparer = null)
+        {
+            return elementComparer == null || elementComparer == EqualityComparer<TElement>.Default
+                ? SequenceComparer<TElement>.DefaultInstance
+                : new SequenceComparer<TElement>(elementComparer);
+        }
+
+        private sealed class SequenceComparer<TElement> : EqualityComparer<IEnumerable<TElement>>
+        {
+            private static EqualityComparer<IEnumerable<TElement>> defaultInstance;
+            public static EqualityComparer<IEnumerable<TElement>> DefaultInstance
+            {
+                get
+                {
+                    return defaultInstance ?? (defaultInstance = new SequenceComparer<TElement>(EqualityComparer<TElement>.Default));
+                }
+            }
+
+            private readonly IEqualityComparer<TElement> elementComparer;
+
+            public SequenceComparer(IEqualityComparer<TElement> elementComparer)
+            {
+                this.elementComparer = elementComparer;
+            }
+
+            public override bool Equals(IEnumerable<TElement> x, IEnumerable<TElement> y)
+            {
+                if (x == null)
+                {
+                    return y == null;
+                }
+                if (y == null)
+                {
+                    return false;
+                }
+
+                return x.SequenceEqual(y, this.elementComparer);
+            }
+
+            public override int GetHashCode(IEnumerable<TElement> obj)
+            {
+                return obj != null  
+                    // hash combine logic based on .NET Tuple.CombineHashCodes
+                    ? obj.Aggregate(-1, (hash, element) => (((hash << 5) + hash) ^ this.elementComparer.GetHashCode(element)))
+                    : 0;
             }
         }
         #endregion
