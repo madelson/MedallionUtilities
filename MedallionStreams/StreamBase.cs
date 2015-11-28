@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text;
@@ -256,6 +257,7 @@ namespace Medallion.IO
                 : this.cachedSingleByteBuffer;
             var singleByteBuffer = cachedSingleByteBuffer ?? new byte[1];
 
+            singleByteBuffer[0] = value;
             this.InternalWrite(singleByteBuffer, offset: 0, count: 1);
             
             if (this.threadsafe)
@@ -563,65 +565,100 @@ namespace Medallion.IO
         }
         #endregion
 
-        // todo should be stricter, and allow EITHER write or writeasync
         #region ---- Override Verification ----
-        // todo populate
-        private static readonly IReadOnlyCollection<MethodInfo> RequiredReadOverrides, 
-            RequiredWriteOverrides, 
-            RequiredSeekOverrides, 
-            RequiredReadTimeoutOverrides,
-            RequiredWriteTimeoutOverrides,
-            RequiredAsyncReadOverrides,
-            RequiredAsyncWriteOverrides;
+        private static readonly MethodInfo ReadMethod = Method(s => s.InternalRead(null, 0, 0)),
+            ReadAsyncMethod = Method(s => s.InternalReadAsync(null, 0, 0, default(CancellationToken))),
+            WriteMethod = Method(s => s.InternalWrite(null, 0, 0)),
+            WriteAsyncMethod = Method(s => s.InternalWriteAsync(null, 0, 0, default(CancellationToken))),
+            FlushMethod = Method(s => s.InternalFlush()),
+            FlushAsyncMethod = Method(s => s.InternalFlushAsync(default(CancellationToken)));
+
+        private static readonly PropertyInfo PositionProperty = Property(s => s.InternalPosition),
+            LengthProperty = Property(s => s.InternalLength),
+            ReadTimeoutProperty = Property(s => s.InternalReadTimeout),
+            WriteTimeoutProperty = Property(s => s.InternalWriteTimeout);
+
+        private static readonly HashSet<MethodInfo> OverridableMethods = new HashSet<MethodInfo>
+        {
+            ReadMethod, ReadAsyncMethod, WriteMethod, WriteAsyncMethod, FlushMethod, FlushAsyncMethod,
+            PositionProperty.GetMethod, PositionProperty.SetMethod, LengthProperty.GetMethod, LengthProperty.SetMethod,
+            ReadTimeoutProperty.GetMethod, ReadTimeoutProperty.SetMethod, WriteTimeoutProperty.GetMethod, WriteTimeoutProperty.SetMethod,
+        };
 
         private static readonly Hashtable VerifiedTypeCache = new Hashtable();
 
         private void VerifyCapabilities()
         {
             var streamType = this.GetType();
+            // safe because Hashtable is safe for multiple concurrent readers and one writer
             if (VerifiedTypeCache.ContainsKey(streamType))
             {
                 return;
             }
 
             var requiredMethods = new HashSet<MethodInfo>();
+            var optionalMethods = new HashSet<MethodInfo>();
             if (this.canRead)
             {
-                foreach (var method in RequiredReadOverrides) { requiredMethods.Add(method); }
-                if (this.canTimeout)
-                {
-                    foreach (var method in RequiredReadTimeoutOverrides) { requiredMethods.Add(method); }
-                }
                 if (this.async)
                 {
-                    foreach (var method in RequiredAsyncReadOverrides) { requiredMethods.Add(method); }
+                    requiredMethods.Add(ReadAsyncMethod);
+                    optionalMethods.Add(ReadMethod);
+                }
+                else
+                {
+                    requiredMethods.Add(ReadMethod);
+                }
+
+                if (this.canTimeout)
+                {
+                    requiredMethods.Add(ReadTimeoutProperty.GetMethod);
+                    requiredMethods.Add(ReadTimeoutProperty.SetMethod);
                 }
             }
             if (this.canWrite)
             {
-                foreach (var method in RequiredWriteOverrides) { requiredMethods.Add(method); }
-                if (this.canTimeout)
-                {
-                    foreach (var method in RequiredWriteTimeoutOverrides) { requiredMethods.Add(method); }
-                }
                 if (this.async)
                 {
-                    foreach (var method in RequiredAsyncWriteOverrides) { requiredMethods.Add(method); }
+                    requiredMethods.Add(WriteAsyncMethod);
+                    optionalMethods.Add(WriteMethod);
+                    requiredMethods.Add(FlushAsyncMethod);
+                    optionalMethods.Add(FlushMethod);
+                }
+                else
+                {
+                    requiredMethods.Add(WriteMethod);
+                    requiredMethods.Add(FlushMethod);
+                }
+
+                if (this.canTimeout)
+                {
+                    requiredMethods.Add(WriteTimeoutProperty.GetMethod);
+                    requiredMethods.Add(WriteTimeoutProperty.SetMethod);
                 }
             }
             if (this.canSeek)
             {
-                foreach (var method in RequiredSeekOverrides) { requiredMethods.Add(method); }
+                requiredMethods.Add(PositionProperty.GetMethod);
+                requiredMethods.Add(PositionProperty.SetMethod);
+                requiredMethods.Add(LengthProperty.GetMethod);
+                requiredMethods.Add(LengthProperty.SetMethod);
             }
 
-            var typeMethods = streamType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                .Where(m => m.DeclaringType != typeof(StreamBase));
-            foreach (var method in typeMethods)
+            var potentialOverrides = new HashSet<MethodInfo>(
+                streamType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Where(m => m.DeclaringType != typeof(StreamBase))
+            );
+            
+            var overrides = streamType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .Where(m => m.DeclaringType != typeof(StreamBase))
+                .Select(s => s.GetBaseDefinition())
+                .Where(OverridableMethods.Contains);
+            foreach (var method in overrides)
             {
-                // todo does this go all the way to the base?
-                if (requiredMethods.Remove(method.GetBaseDefinition()) && requiredMethods.Count == 0)
+                if (!requiredMethods.Remove(method) && !optionalMethods.Remove(method))
                 {
-                    break; // short-circuit if we've found everything
+                    throw new ArgumentException($"{streamType} override of method {method} does not match the provided capabilities");
                 }
             }
 
@@ -635,6 +672,16 @@ namespace Medallion.IO
             {
                 VerifiedTypeCache[streamType] = null;
             }
+        }
+
+        private static MethodInfo Method(Expression<Action<StreamBase>> methodCall)
+        {
+            return ((MethodCallExpression)methodCall.Body).Method;
+        }
+
+        private static PropertyInfo Property<TProperty>(Expression<Func<StreamBase, TProperty>> property)
+        {
+            return (PropertyInfo)((MemberExpression)property.Body).Member;
         }
         #endregion
     }

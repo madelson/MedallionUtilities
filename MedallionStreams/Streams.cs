@@ -6,9 +6,12 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace Medallion.IO
 {
+    // TODO library name ideas: DreamStream, Flow
+
     // ideas:
     // streambase, pipe
     // same stuff with readers & writers?
@@ -18,9 +21,76 @@ namespace Medallion.IO
     public static class Streams
     {
         #region ---- Take ----
-        public Stream Take(this Stream stream, int count, bool leaveOpen = false)
+        public static Stream Take(this Stream stream, long count, bool leaveOpen = false)
         {
+            Throw.IfNull(stream, nameof(stream));
+            Throw.IfOutOfRange(count, nameof(count), min: 0);
 
+            return new TakeStream(stream, count, leaveOpen);
+        }
+
+        private sealed class TakeStream : StreamBase
+        {
+            private readonly Stream stream;
+            private readonly bool leaveOpen;
+            private long remaining;
+
+            public TakeStream(Stream stream, long count, bool leaveOpen)
+                : base(StreamCapabilities.Read | StreamCapabilities.Async)
+            {
+                this.stream = stream;
+                this.remaining = count;
+                this.leaveOpen = leaveOpen;
+            }
+
+            protected override int InternalRead(byte[] buffer, int offset, int count)
+            {
+                if (this.remaining == 0)
+                {
+                    return 0; // eof
+                }
+
+                var bytesRead = this.stream.Read(buffer, offset, (int)Math.Min(count, remaining));
+                if (bytesRead == 0)
+                {
+                    this.remaining = 0;
+                }
+                else
+                {
+                    this.remaining -= bytesRead;
+                }
+
+                return bytesRead;
+            }
+
+            protected async override Task<int> InternalReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                if (this.remaining == 0)
+                {
+                    return 0; // eof
+                }
+
+                var bytesRead = await this.stream.ReadAsync(buffer, offset, (int)Math.Min(count, remaining), cancellationToken).ConfigureAwait(false);
+                if (bytesRead == 0)
+                {
+                    this.remaining = 0;
+                }
+                else
+                {
+                    this.remaining -= bytesRead;
+                }
+
+                return bytesRead;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && !this.leaveOpen)
+                {
+                    this.stream.Dispose();
+                }
+                base.Dispose(disposing);
+            }
         }
         #endregion
 
@@ -135,6 +205,52 @@ namespace Medallion.IO
         public static Stream AsStream(this RandomNumberGenerator randomNumberGenerator)
         {
 
+        }
+
+        private sealed class RandomStream : StreamBase
+        {
+            private readonly Action<byte[]> nextBytes;
+            private byte[] buffer;
+            private int bufferSize;
+
+            public RandomStream(Action<byte[]> nextBytes)
+                : base(StreamCapabilities.Read)
+            {
+                this.nextBytes = nextBytes;
+            }
+            
+            protected override int InternalRead(byte[] buffer, int offset, int count)
+            {
+                // fast path: fill the provided buffer directly
+                if (offset == 0 && count == buffer.Length && this.bufferSize == 0)
+                {
+                    this.nextBytes(buffer);
+                    return count;
+                }
+
+                // standard path: fill the provided buffer from our buffer
+                var bytesRead = 0;
+                while (bytesRead < count)
+                {
+                    // if we have no bytes, refill the buffer
+                    if (this.bufferSize == 0)
+                    {
+                        if (this.buffer == null)
+                        {
+                            this.buffer = new byte[1024];
+                        }
+                        this.nextBytes(this.buffer);
+                        this.bufferSize = this.buffer.Length;
+                    }
+                    
+                    var bytesToCopy = Math.Min(count - bytesRead, this.bufferSize);
+                    Buffer.BlockCopy(src: this.buffer, srcOffset: this.buffer.Length - this.bufferSize, dst: buffer, dstOffset: offset + bytesRead, count: bytesToCopy);
+                    bytesRead += bytesToCopy;
+                    this.bufferSize -= bytesToCopy;
+                }
+
+                return count;
+            }
         }
         #endregion
     }
