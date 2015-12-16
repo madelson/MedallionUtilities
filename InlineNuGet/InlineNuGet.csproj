@@ -93,6 +93,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CSharp6SyntaxRewriter.cs" />
+    <Compile Include="NullGuardRewriter.cs" />
     <Compile Include="ProjectProcessor.cs" />
     <Compile Include="SyntaxRewriter.cs" />
     <Compile Include="Program.cs" />
