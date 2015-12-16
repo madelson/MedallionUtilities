@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NullGuard;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -10,6 +11,7 @@ using System.Threading.Tasks;
 
 namespace Medallion.Async
 {
+    [NullGuard(ValidationFlags.Arguments)]
     public static class Async
     {
         private static readonly Task<bool> TrueTask = Task.FromResult(true);
@@ -17,7 +19,6 @@ namespace Medallion.Async
         #region ---- WaitAsync ----
         public static Task<bool> WaitAsync(this Task task, TimeSpan timeout)
         {
-            Throw.IfNull(task, "task");
             timeout.AssertIsValidTimeout();
 
             if (task.IsCompleted)
@@ -52,8 +53,6 @@ namespace Medallion.Async
         #region ---- TaskCompletionSource ----
         public static TaskCompletionSource<TResult> CancelWith<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, CancellationToken cancellationToken)
         {
-            Throw.IfNull(taskCompletionSource, "taskCompletionSource");
-
             cancellationToken.Register(state => ((TaskCompletionSource<TResult>)state).TrySetCanceled(), state: taskCompletionSource);
 
             return taskCompletionSource;
@@ -61,7 +60,6 @@ namespace Medallion.Async
 
         public static TaskCompletionSource<TResult> TimeoutAfter<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, TimeSpan timeout)
         {
-            Throw.IfNull(taskCompletionSource, "taskCompletionSource");
             timeout.AssertIsValidTimeout();
             
             if (timeout != Timeout.InfiniteTimeSpan)
@@ -93,8 +91,6 @@ namespace Medallion.Async
 
         public static TaskCompletionSource<TResult> CompleteWith<TResult, TTaskResult>(this TaskCompletionSource<TResult> taskCompletionSource, Task<TTaskResult> task, Func<TTaskResult, TResult> resultFactory)
         {
-            Throw.IfNull(resultFactory, nameof(resultFactory));
-
             return taskCompletionSource.InternalCompleteWith(task, (t, state) => ((Func<TTaskResult, TResult>)state)(t.Result), resultFactoryState: resultFactory);
         }
 
@@ -116,9 +112,6 @@ namespace Medallion.Async
             TaskScheduler scheduler = null)
             where TTask : Task
         {
-            Throw.IfNull(taskCompletionSource, nameof(taskCompletionSource));
-            Throw.IfNull(task, nameof(task));
-
             task.ContinueWith(
                 (t, state) =>
                 {
@@ -146,6 +139,25 @@ namespace Medallion.Async
         }
         #endregion
 
+        #region ---- Synchronous Task ----
+        // todo overloads for Task and with state
+        public static Task<TResult> SynchronousTask<TResult>(Func<TResult> resultFactory, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var taskBuilder = new TaskCompletionSource<TResult>()
+                .CancelWith(cancellationToken);
+            try
+            {
+                taskBuilder.TrySetResult(resultFactory());
+            }
+            catch (Exception ex)
+            {
+                taskBuilder.TrySetException(ex);
+            }
+
+            return taskBuilder.Task;
+        }
+        #endregion
+
         #region ---- Then ----
         public static Task Then(
             this Task task, 
@@ -154,8 +166,6 @@ namespace Medallion.Async
             TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
             TaskScheduler scheduler = null)
         {
-            Throw.IfNull(continuationAction, nameof(continuationAction));
-
             return new TaskCompletionSource<bool>()
                 .InternalCompleteWith(
                     task, 
@@ -175,8 +185,6 @@ namespace Medallion.Async
             TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
             TaskScheduler scheduler = null)
         {
-            Throw.IfNull(continuationFunction, nameof(continuationFunction));
-
             // TODO creates an extraneous task
             return new TaskCompletionSource<TResult>()
                 .InternalCompleteWith(
@@ -197,8 +205,6 @@ namespace Medallion.Async
             TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
             TaskScheduler scheduler = null)
         {
-            Throw.IfNull(continuationAction, nameof(continuationAction));
-
             return new TaskCompletionSource<bool>()
                 .InternalCompleteWith(
                     task, 
@@ -213,8 +219,6 @@ namespace Medallion.Async
 
         public static Task Then<TTaskResult, TContinuationResult>(this Task<TTaskResult> task, Func<TTaskResult, TContinuationResult> continuationFunction)
         {
-            Throw.IfNull(continuationFunction, nameof(continuationFunction));
-
             return new TaskCompletionSource<TContinuationResult>()
                 .InternalCompleteWith(task, (t, state) => ((Func<TTaskResult, TContinuationResult>)state)(t.Result), resultFactoryState: continuationFunction)
                 .Task;
@@ -224,7 +228,6 @@ namespace Medallion.Async
         #region ---- Process ----
         public static Task<int> WaitForExitAsync(this Process process, CancellationToken cancellationToken = default(CancellationToken))
         {
-            Throw.IfNull(process, "process");
             process.EnableRaisingEvents = true;
 
             var taskCompletionSource = new TaskCompletionSource<int>()
@@ -252,14 +255,11 @@ namespace Medallion.Async
 
             return taskCompletionSource.Task;
         }
-        
-
         #endregion
 
         #region ---- WaitHandle ----
         public static Task<bool> WaitOneAsync(this WaitHandle waitHandle, TimeSpan? timeout = null, CancellationToken cancellationToken = default(CancellationToken))
         {
-            Throw.IfNull(waitHandle, "waitHandle");
             if (timeout.HasValue)
             {
                 timeout.Value.AssertIsValidTimeout();
