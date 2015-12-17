@@ -6,30 +6,26 @@ using System.Threading.Tasks;
 
 namespace Medallion.Random
 {
+    using NullGuard;
+    using System.IO;
     using System.Security.Cryptography;
     using System.Threading;
     using Random = System.Random;
 
     // java methods
-    // streams
-    // global methods
-    // security RandomNumberGenerator back-and-forth
+    // nextgaussian
 
+    [NullGuard(ValidationFlags.Arguments)]
     public static class Rand
     {
         #region ---- Utility Extensions ----
         public static bool NextBoolean(this Random random)
         {
-            Throw.IfNull(random, nameof(random));
-
             return (random.Next() & 1) == 1;
         }
 
         public static bool NextBoolean(this Random random, double probability)
         {
-            Throw.IfNull(random, nameof(random));
-            Throw.IfOutOfRange(probability, nameof(probability), min: 0, max: 1);
-
             if (probability == 0)
             {
                 return false;
@@ -39,20 +35,21 @@ namespace Medallion.Random
                 return true;
             }
 
+            if (probability < 0 || probability > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(probability), $"probability must be in [0, 1]. Found {probability}. ");
+            }
+
             return random.NextDouble() < probability;
         }
 
         public static int NextInt32(this Random random)
         {
-            Throw.IfNull(random, nameof(random));
-
             return ((random.Next() & ushort.MaxValue) << 16) + (random.Next() & ushort.MaxValue);
         }
 
         public static long NextInt64(this Random random)
         {
-            Throw.IfNull(random, nameof(random));
-
             const long Mask24 = 0xFFFFFF;
 
             return ((random.Next() & Mask24) << 48)
@@ -63,8 +60,6 @@ namespace Medallion.Random
         #region ---- Streams ----
         public static IEnumerable<double> NextDoubles(this Random random)
         {
-            Throw.IfNull(random, nameof(random));
-
             return NextDoublesIterator(random);
         }
 
@@ -78,8 +73,6 @@ namespace Medallion.Random
 
         public static IEnumerable<byte> NextBytes(this Random random)
         {
-            Throw.IfNull(random, nameof(random));
-
             return NextBytesIterator(random);
         }
 
@@ -100,8 +93,6 @@ namespace Medallion.Random
         #region ---- Shuffling ----
         public static IEnumerable<T> Shuffled<T>(this IEnumerable<T> source, Random random = null)
         {
-            Throw.IfNull(source, nameof(source));
-            
             return ShuffledIterator(source, random);
         }
 
@@ -154,7 +145,6 @@ namespace Medallion.Random
 
         public static void Shuffle<T>(this IList<T> list, Random random = null)
         {
-            Throw.IfNull(list, nameof(list));
             var rand = random ?? ThreadLocalRandom;
 
             for (var i = 0; i < list.Count - 1; ++i)
@@ -170,65 +160,355 @@ namespace Medallion.Random
         #endregion
 
         #region ---- ThreadLocal ----
-        // ideas for GetCurrent()
-        // 1. like an object pool: gives you the current one wrapped in a disposable to put it back
-        // 2. a wrapped instance that asserts Thread.CurrentThread == owningThread on each call.
-
         [ThreadStatic]
-        private static Random threadLocalRandom;
+        private static SafeThreadLocalRandom threadLocalRandom;
 
-        private static Random ThreadLocalRandom { get { return threadLocalRandom ?? (threadLocalRandom = Create()); } }
+        private static SafeThreadLocalRandom ThreadLocalRandom { get { return threadLocalRandom ?? (threadLocalRandom = new SafeThreadLocalRandom()); } }
+
+        public static Random Current { get { return ThreadLocalRandom; } }
 
         public static double NextDouble()
         {
-            return ThreadLocalRandom.NextDouble();
+            return ThreadLocalRandom.UnsafeNextDouble();
         }
-
-        public static int Next()
-        {
-            return ThreadLocalRandom.Next();
-        }
-
+        
         public static int Next(int minValue, int maxValue)
         {
-            return ThreadLocalRandom.Next(minValue, maxValue);
+            return ThreadLocalRandom.UnsafeNext(minValue, maxValue);
         }
-
-        public static void NextBytes(byte[] buffer)
+        
+        // no NullGuard needed since this simply delegates
+        private sealed class SafeThreadLocalRandom : Random
         {
-            ThreadLocalRandom.NextBytes(buffer);
-        }
+            private readonly Thread thread;
 
-        // TODO do we want these?
-        public static bool NextBoolean()
-        {
-            return ThreadLocalRandom.NextBoolean();
-        }
+            internal SafeThreadLocalRandom()
+                : base(Seed: unchecked((31 * Thread.CurrentThread.ManagedThreadId) + Environment.TickCount))
+            {
+                this.thread = Thread.CurrentThread;
+            }
 
-        public static bool NextBoolean(double probability)
-        {
-            return ThreadLocalRandom.NextBoolean(probability);
+            // note: we don't need to override Sample() because it's protected. This
+            // allows us to have Unsafe() methods that call base, even though the base
+            // methods might call Sample(). The disadvantage is that if later versions of
+            // the framework add new methods which call Sample() under the hood, they
+            // won't have thread-protection until we update this class. Given that the protection
+            // is largely developer convenience, I'm ok with that tradeoff
+
+            public override int Next()
+            {
+                this.VerifyThread();
+                return base.Next();
+            }
+
+            public override int Next(int maxValue)
+            {
+                this.VerifyThread();
+                return base.Next(maxValue);
+            }
+
+            public override int Next(int minValue, int maxValue)
+            {
+                this.VerifyThread();
+                return base.Next(minValue, maxValue);
+            }
+
+            public int UnsafeNext(int minValue, int maxValue)
+            {
+                return base.Next(minValue, maxValue);
+            }
+
+            public override void NextBytes(byte[] buffer)
+            {
+                this.VerifyThread();
+                base.NextBytes(buffer);
+            }
+
+            public override double NextDouble()
+            {
+                this.VerifyThread();
+                return base.NextDouble();
+            }
+
+            public double UnsafeNextDouble()
+            {
+                return base.NextDouble();
+            }
+
+            private void VerifyThread()
+            {
+                if (Thread.CurrentThread != this.thread)
+                {
+                    throw new InvalidOperationException($"Cannot use thread-local random from thread {this.thread.ManagedThreadId} on thread {Thread.CurrentThread.ManagedThreadId}");
+                }
+            }
         }
         #endregion
 
-        #region ---- Factories ----
-        private static int nextSeed;
-
+        #region ---- Factory ---- 
         public static Random Create()
         {
-            var combinedSeed = unchecked((31 * Interlocked.Increment(ref nextSeed)) + Environment.TickCount);
+            var combinedSeed = unchecked((31 * Environment.TickCount) + Current.Next());
             return new Random(combinedSeed);
+        }
+        #endregion
+
+        #region ---- Stream Interop ----
+        public static Random FromStream(Stream randomBytes)
+        {
+            return new StreamRandomNumberGenerator(randomBytes).AsRandom();
+        }
+
+        [NullGuard(ValidationFlags.Arguments)]
+        private sealed class StreamRandomNumberGenerator : RandomNumberGenerator
+        {
+            private readonly Stream stream;
+
+            internal StreamRandomNumberGenerator(Stream stream)
+            {
+                this.stream = stream;
+            }
+
+            public override void GetBytes(byte[] data)
+            {
+                var bytesReadBeforeLastSeek = 0;
+                var bytesRead = 0;
+                while (bytesRead < data.Length)
+                {
+                    // based on StreamReader.ReadBlock. We don't want to
+                    // give up until the end of the file is reached
+
+                    var nextBytesRead = this.stream.Read(data, offset: bytesRead, count: data.Length - bytesRead);
+                    if (nextBytesRead == 0) // eof
+                    {
+                        if (!this.stream.CanSeek)
+                        {
+                            throw new InvalidOperationException("Cannot produce additional random bytes because the given stream is exhausted and does not support seeking");
+                        }
+                        if (bytesReadBeforeLastSeek == 0)
+                        {
+                            // prevents us from going into an infinite loop seeking back to the beginning of an empty stream
+                            throw new InvalidOperationException("Cannot produce additional random bytes because the given stream is empty");
+                        }
+
+                        // reset the stream
+                        this.stream.Seek(0, SeekOrigin.Begin);
+                        bytesReadBeforeLastSeek = bytesRead;
+                    }
+                    else
+                    {
+                        bytesRead += nextBytesRead;
+                    }
+                }
+            }
+        }
+        #endregion
+        
+        #region ---- NextBits Random ----
+        [NullGuard(ValidationFlags.Arguments)]
+        private abstract class NextBitsRandom : Random
+        {
+            // pass through the seed just in case
+            protected NextBitsRandom(int seed) : base(seed) { }
+
+            internal abstract int NextBits(int bits);
+
+            #region ---- .NET Random Methods ----
+            public sealed override int Next()
+            {
+                return this.Next(int.MaxValue);
+            }
+
+            public sealed override int Next(int maxValue)
+            {
+                // see remarks for this special case in the docs:
+                // https://msdn.microsoft.com/en-us/library/zd1bc8e5%28v=vs.110%29.aspx?f=255&MSPPError=-2147217396
+                if (maxValue == 0)
+                {
+                    return 0;
+                }
+                if (maxValue <= 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(maxValue), $"{nameof(maxValue)} must be positive. ");
+                }
+
+                unchecked
+                {
+                    if ((maxValue & -maxValue) == maxValue)  // i.e., bound is a power of 2
+                    {
+                        return (int)((maxValue * (long)this.NextBits(31)) >> 31);
+                    }
+
+                    int bits, val;
+                    do
+                    {
+                        bits = this.NextBits(31);
+                        val = bits % maxValue;
+                    } while (bits - val + (maxValue - 1) < 0);
+                    return val;
+                }
+            }
+
+            public sealed override int Next(int minValue, int maxValue)
+            {
+                if (minValue == maxValue)
+                {
+                    return minValue;
+                }
+                if (minValue > maxValue)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(minValue), $"{nameof(minValue)} ({minValue}) must not be > {nameof(maxValue)} ({maxValue})");
+                }
+
+                var range = (long)maxValue - minValue;
+
+                // if the range is small, we can use Next(int)
+                if (range <= int.MaxValue)
+                {
+                    return minValue + this.Next(maxValue: (int)range);
+                }
+
+                // otherwise, we use java's implementation for 
+                // nextLong(long, long)
+                var r = this.NextInt64();
+                var m = range - 1;
+
+                // power of two
+                if ((range & m) == 0L)
+                {
+                    r = (r & m);
+                }
+                else
+                {
+                    // reject over-represented candidates
+                    for (
+                        var u = unchecked((long)((ulong)r >> 1)); // ensure non-negative
+                        u + m - (r = u % range) < 0; // rejection check
+                        u = unchecked((long)((ulong)this.NextInt64() >> 1)) // retry
+                    ) ; 
+                }
+
+                return checked((int)(r + minValue));
+            }
+
+            public override void NextBytes(byte[] buffer)
+            {
+                for (int i = 0; i < buffer.Length;)
+                {
+                    for (int rand = this.NextInt32(), n = Math.Min(buffer.Length - i, 4);
+                         n-- > 0; 
+                         rand >>= 8)
+                    {
+                        buffer[i++] = unchecked((byte)rand);
+                    }
+                }
+            }
+
+            public sealed override double NextDouble()
+            {
+                return this.Sample();
+            }
+
+            protected sealed override double Sample()
+            {
+                return (((long)this.NextBits(26) << 27) + this.NextBits(27)) / (double)(1L << 53);
+            }
+            #endregion
+
+            #region ---- Java Methods ----
+            public bool NextBoolean()
+            {
+                return this.NextBits(1) != 0;
+            }
+
+            public float NextSingle()
+            {
+                return this.NextBits(24) / ((float)(1 << 24));
+            }
+
+            private double? nextNextGaussian;
+
+            public double NextGaussian()
+            {
+                if (this.nextNextGaussian.HasValue)
+                {
+                    var result = this.nextNextGaussian.Value;
+                    this.nextNextGaussian = null;
+                    return result;
+                }
+
+                double v1, v2, s;
+                do
+                {
+                    v1 = 2 * this.NextDouble() - 1;   // between -1.0 and 1.0
+                    v2 = 2 * this.NextDouble() - 1;   // between -1.0 and 1.0
+                    s = v1 * v1 + v2 * v2;
+                } while (s >= 1 || s == 0);
+                double multiplier = Math.Sqrt(-2 * Math.Log(s) / s);
+                this.nextNextGaussian = v2 * multiplier;
+                return v1 * multiplier;
+            }
+
+            public int NextInt32()
+            {
+                return this.NextBits(32);
+            }
+
+            public long NextInt64()
+            {
+                unchecked
+                {
+                    return ((long)this.NextBits(32) << 32) + this.NextBits(32);
+                }
+            }
+            #endregion
+        }
+        #endregion
+
+        #region ---- Java Random ----
+        public static Random CreateJavaRandom()
+        {
+            // todo
+            var seed = ((long)Environment.TickCount << 32) | (uint)ThreadLocalRandom.NextInt32();
+            return CreateJavaRandom(seed);
+        }
+
+        public static Random CreateJavaRandom(long seed)
+        {
+            return new JavaRandom(seed);
+        }
+
+        private sealed class JavaRandom : NextBitsRandom
+        {
+            private long seed;
+
+            public JavaRandom(long seed)
+                // we shouldn't need the seed, but passing it through
+                // just in case new Random() methods are added in the future
+                // that don't call anything we've overloaded
+                : base(unchecked((int)seed))
+            {
+                this.seed = (seed ^ 0x5DEECE66DL) & ((1L << 48) - 1);
+            }
+
+            internal override int NextBits(int bits)
+            {
+                unchecked
+                {
+                    this.seed = ((seed * 0x5DEECE66DL) + 0xBL) & ((1L << 48) - 1);
+                    return (int)((ulong)this.seed >> (48 - bits));
+                }
+            }
         }
         #endregion
 
         #region ---- RandomNumberGenerator Interop ----
         public static Random AsRandom(this RandomNumberGenerator randomNumberGenerator)
         {
-            Throw.IfNull(randomNumberGenerator, nameof(randomNumberGenerator));
-
             return new RandomNumberGeneratorRandom(randomNumberGenerator);
         }
 
+        [NullGuard(ValidationFlags.Arguments)]
         private sealed class RandomNumberGeneratorRandom : Random
         {
             private const int BufferLength = 512;
@@ -237,7 +517,7 @@ namespace Medallion.Random
             private readonly byte[] buffer = new byte[BufferLength];
             private int nextByteIndex;
 
-            public RandomNumberGeneratorRandom(RandomNumberGenerator randomNumberGenerator)
+            internal RandomNumberGeneratorRandom(RandomNumberGenerator randomNumberGenerator)
                 : base(Seed: 0) // avoid having to generate a time-based seed 
             {
                 this.rand = randomNumberGenerator;
@@ -265,14 +545,20 @@ namespace Medallion.Random
 
             public override int Next(int minValue, int maxValue)
             {
-                Throw.If(minValue > maxValue, nameof(minValue), nameof(minValue) + " must be < " + nameof(maxValue));
-
+                if (minValue > maxValue)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(minValue), $"{nameof(minValue)} ({minValue}) must be <= {nameof(maxValue)} ({maxValue}). ");
+                }
+                
                 // this optimization for powers of two from https://docs.oracle.com/javase/8/docs/api/java/util/Random.html#nextInt-int-
                 // We leave this outside of InternalNext() because Next() won't ever benefit from it
                 var difference = (long)maxValue - minValue;
-                if (difference <= int.MaxValue && (difference & -difference) == difference)
+                unchecked
                 {
-                    return minValue + (int)((difference * this.NextBits(31)) >> 31);
+                    if (difference <= int.MaxValue && (difference & -difference) == difference)
+                    {
+                        return minValue + (int)((difference * this.NextBits(31)) >> 31);
+                    }
                 }
 
                 return checked((int)(minValue + this.InternalNext(maxValue: difference)));
@@ -294,21 +580,14 @@ namespace Medallion.Random
                     this.rand.GetBytes(buffer);
                     this.nextByteIndex = 0;
                 }
-                
-                var result = 0;
-                int bitsLoaded;
-                for (bitsLoaded = 0; bitsLoaded < bits; bitsLoaded += 8)
-                {
-                    result += this.buffer[this.nextByteIndex++] << bitsLoaded;
-                }
 
-                var remainderBits = bits & 7; // equivalent to bits % 8
-                if (remainderBits > 0)
-                {
-                    result += (this.buffer[this.nextByteIndex++] >> (8 - remainderBits)) << bitsLoaded;
-                }
+                var nextFourBytes = BitConverter.ToUInt32(this.buffer, this.nextByteIndex);
+                this.nextByteIndex += 4;
 
-                return result;
+                // the fact that we're uint here means we don't have to worry about sign-extending shift behavior
+                var nextBits = nextFourBytes >> (32 - bits);
+
+                return unchecked((int)nextBits);
             }
 
             // we override this for performance reasons, since we can call the underlying RNG's NextBytes() method directly
