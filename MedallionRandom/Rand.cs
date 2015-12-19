@@ -18,29 +18,10 @@ namespace Medallion.Random
     [NullGuard(ValidationFlags.Arguments)]
     public static class Rand
     {
-        #region ---- Utility Extensions ----
+        #region ---- Java Extensions ----
         public static bool NextBoolean(this Random random)
         {
             return random.NextBits(1) != 0;
-        }
-
-        public static bool NextBoolean(this Random random, double probability)
-        {
-            if (probability == 0)
-            {
-                return false;
-            }
-            if (probability == 1)
-            {
-                return true;
-            }
-
-            if (probability < 0 || probability > 1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(probability), $"probability must be in [0, 1]. Found {probability}. ");
-            }
-
-            return random.NextDouble() < probability;
         }
 
         public static int NextInt32(this Random random)
@@ -62,6 +43,24 @@ namespace Medallion.Random
             return ((long)random.Next30OrFewerBits(22) << 42)
                 + ((long)random.Next30OrFewerBits(21) << 21)
                 + random.Next30OrFewerBits(21);
+        }
+
+        public static float NextSingle(this Random random)
+        {
+            return random.NextBits(24) / ((float)(1 << 24));
+        }
+
+        public static IEnumerable<double> NextDoubles(this Random random)
+        {
+            return NextDoublesIterator(random);
+        }
+
+        private static IEnumerable<double> NextDoublesIterator(Random random)
+        {
+            while (true)
+            {
+                yield return random.NextDouble();
+            }
         }
 
         private static int NextBits(this Random random, int bits)
@@ -96,19 +95,26 @@ namespace Medallion.Random
 
             return random.Next() >> (31 - bits);
         }
+        #endregion
 
-        #region ---- Streams ----
-        public static IEnumerable<double> NextDoubles(this Random random)
+        #region ---- Other Extensions ----
+        public static bool NextBoolean(this Random random, double probability)
         {
-            return NextDoublesIterator(random);
-        }
-
-        private static IEnumerable<double> NextDoublesIterator(Random random)
-        {
-            while (true)
+            if (probability == 0)
             {
-                yield return random.NextDouble();
+                return false;
             }
+            if (probability == 1)
+            {
+                return true;
+            }
+
+            if (probability < 0 || probability > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(probability), $"probability must be in [0, 1]. Found {probability}. ");
+            }
+
+            return random.NextDouble() < probability;
         }
 
         public static IEnumerable<byte> NextBytes(this Random random)
@@ -197,15 +203,14 @@ namespace Medallion.Random
             }
         }
         #endregion
-        #endregion
 
         #region ---- Gaussian ----
         public static double NextGaussian(this Random random)
         {
-            var nextBitsRandom = random as NextBitsRandom;
-            if (nextBitsRandom != null)
+            var nextGaussianRandom = random as INextGaussianRandom;
+            if (nextGaussianRandom != null)
             {
-                return nextBitsRandom.NextGaussian();
+                return nextGaussianRandom.NextGaussian();
             }
 
             double result, ignored;
@@ -227,6 +232,11 @@ namespace Medallion.Random
                 yield return next;
                 yield return nextNext;
             }
+        }
+
+        private interface INextGaussianRandom
+        {
+            double NextGaussian();
         }
 
         private static void NextTwoGaussians(this Random random, out double value1, out double value2)
@@ -264,7 +274,7 @@ namespace Medallion.Random
         }
         
         // no NullGuard needed since this simply delegates
-        private sealed class SafeThreadLocalRandom : Random
+        private sealed class SafeThreadLocalRandom : Random, INextGaussianRandom
         {
             private readonly Thread thread;
 
@@ -321,6 +331,25 @@ namespace Medallion.Random
                 return base.NextDouble();
             }
 
+            private double? nextNextGaussian;
+
+            double INextGaussianRandom.NextGaussian()
+            {
+                this.VerifyThread();
+
+                if (this.nextNextGaussian.HasValue)
+                {
+                    var result = this.nextNextGaussian.Value;
+                    this.nextNextGaussian = null;
+                    return result;
+                }
+
+                double next, nextNext;
+                this.NextTwoGaussians(out next, out nextNext);
+                this.nextNextGaussian = nextNext;
+                return next;
+            }
+
             private void VerifyThread()
             {
                 if (Thread.CurrentThread != this.thread)
@@ -332,6 +361,7 @@ namespace Medallion.Random
         #endregion
 
         #region ---- Factory ---- 
+        // TODO look at how java does this
         public static Random Create()
         {
             var combinedSeed = unchecked((31 * Environment.TickCount) + Current.Next());
@@ -391,8 +421,8 @@ namespace Medallion.Random
         #endregion
         
         #region ---- NextBits Random ----
-        [NullGuard(ValidationFlags.Arguments)]
-        private abstract class NextBitsRandom : Random
+        [NullGuard(ValidationFlags.Arguments)] // for NextBytes
+        private abstract class NextBitsRandom : Random, INextGaussianRandom
         {
             // pass through the seed just in case
             protected NextBitsRandom(int seed) : base(seed) { }
@@ -501,21 +531,9 @@ namespace Medallion.Random
             }
             #endregion
 
-            // todo remove
-            #region ---- Java Methods ----
-            public bool NextBoolean()
-            {
-                return this.NextBits(1) != 0;
-            }
-
-            public float NextSingle()
-            {
-                return this.NextBits(24) / ((float)(1 << 24));
-            }
-
             private double? nextNextGaussian;
 
-            public double NextGaussian()
+            double INextGaussianRandom.NextGaussian()
             {
                 if (this.nextNextGaussian.HasValue)
                 {
@@ -529,20 +547,6 @@ namespace Medallion.Random
                 this.nextNextGaussian = nextNext;
                 return next;
             }
-
-            public int NextInt32()
-            {
-                return this.NextBits(32);
-            }
-
-            public long NextInt64()
-            {
-                unchecked
-                {
-                    return ((long)this.NextBits(32) << 32) + this.NextBits(32);
-                }
-            }
-            #endregion
         }
         #endregion
 
