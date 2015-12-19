@@ -45,7 +45,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CollectionBase.cs" />
     <Compile Include="CollectionHelper.cs" />
+    <Compile Include="Comparers.cs" />
     <Compile Include="Empty.cs" />
     <Compile Include="Empty`.cs" />
     <Compile Include="Empty``.cs" />

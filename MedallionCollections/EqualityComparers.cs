@@ -111,7 +111,17 @@ namespace Medallion.Collections
 
             public override bool Equals(IEnumerable<TElement> x, IEnumerable<TElement> y)
             {
-                return x.CollectionEquals(y, this.elementComparer);
+                if (x == null)
+                {
+                    return y == null;
+                }
+                else if (y == null)
+                {
+                    return false;
+                }
+
+                throw new NotImplementedException();
+                //return x.CollectionEquals(y, this.elementComparer);
             }
 
             public override int GetHashCode(IEnumerable<TElement> obj)

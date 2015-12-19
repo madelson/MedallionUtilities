@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -38,151 +39,357 @@ namespace Medallion.Collections
         }
         #endregion
 
-        #region ---- AtLeast / AtMost ----
-        public static bool HasAtLeast<T>(this IEnumerable<T> source, int count)
-        {
-            Throw.IfNull(source, nameof(source));
-            Throw.IfOutOfRange(count, nameof(count), min: 0);
+        #region ---- Append ----
+        //public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> first, IEnumerable<TElement> second)
+        //{
 
-            return source.Take(count).Count() == count;
+        //}
+
+        //public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> sequence, TElement next)
+        //{
+
+        //}
+
+        private static IEnumerator<TElement> AppendEnumerableIterator<TElement>(IAppendEnumerable<TElement> append)
+        {
+            // special case when we don't have nesting to avoid allocating the stack
+            if (!(append.First is IAppendEnumerable<TElement>)
+                && !(append.Second is IAppendEnumerable<TElement>))
+            {
+                foreach (var element in append.First)
+                {
+                    yield return element;
+                }
+                if (append.Second != null)
+                {
+                    yield return append.Next;
+                }
+                else
+                {
+                    foreach (var element in append.Second)
+                    {
+                        yield return element;
+                    }
+                }
+
+                yield break;
+            }
+
+            var stack = new Stack<IAppendEnumerable<TElement>>();
+            stack.Push(append);
+            do
+            {
+                GatherFirstEnumerables(stack.Peek().First, stack);
+
+                var nextAppend = stack.Pop();
+                foreach (var item in nextAppend.First)
+                {
+                    yield return item;
+                }
+
+
+            }
+            while (stack.Count > 0);
         }
 
-        public static bool HasAtMost<T>(this IEnumerable<T> source, int count)
+        private static void GatherFirstEnumerables<TElement>(IEnumerable<TElement> sequence, Stack<IAppendEnumerable<TElement>> stack)
         {
-            Throw.IfNull(source, nameof(source));
-            Throw.IfOutOfRange(count, nameof(count), min: 0, max: int.MaxValue - 1);
-            // todo tryfastcount
-            return source.Take(count + 1).Count() <= count;
+            for (var append = sequence as IAppendEnumerable<TElement>; 
+                append != null; 
+                append = append.First as IAppendEnumerable<TElement>)
+            {
+                stack.Push(append);
+            }
+        }
+
+        private interface IAppendEnumerable<out TElement> : IEnumerable<TElement>
+        {
+            IEnumerable<TElement> First { get; }
+            IEnumerable<TElement> Second { get; }
+            TElement Next { get; }
+        }
+
+        private sealed class FirstSecondAppendEnumerable<TElement> : IAppendEnumerable<TElement>
+        {
+            public FirstSecondAppendEnumerable(IEnumerable<TElement> first, IEnumerable<TElement> second)
+            {
+                this.First = first;
+                this.Second = second;
+            }
+
+            public IEnumerable<TElement> First { get; private set; }
+            public IEnumerable<TElement> Second { get; private set; }
+            TElement IAppendEnumerable<TElement>.Next { get { throw new NotSupportedException(); } }
+
+            public IEnumerator<TElement> GetEnumerator()
+            {
+                return AppendEnumerableIterator(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return this.GetEnumerator();
+            }
+        }
+
+        private sealed class FirstNextAppendEnumerable<TElement> : IAppendEnumerable<TElement>
+        {
+            public FirstNextAppendEnumerable(IEnumerable<TElement> sequence, TElement next)
+            {
+                this.First = sequence;
+                this.Next = next;
+            }
+
+            public IEnumerable<TElement> First { get; private set; }
+            IEnumerable<TElement> IAppendEnumerable<TElement>.Second { get { return null; } }
+            public TElement Next { get; private set; }
+
+            public IEnumerator<TElement> GetEnumerator()
+            {
+                return AppendEnumerableIterator(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return this.GetEnumerator();
+            }
+        }
+
+        private sealed class AppendEnumerable<TElement> : IEnumerable<TElement>
+        {
+            private readonly IEnumerable<TElement> first, second;
+            private readonly TElement next;
+
+            public AppendEnumerable(IEnumerable<TElement> first, IEnumerable<TElement> second)
+            {
+                this.first = first;
+                this.second = second;
+            }
+
+            public AppendEnumerable(IEnumerable<TElement> first, TElement next)
+            {
+                this.first = first;
+                this.next = next;
+            }
+
+            public IEnumerator<TElement> GetEnumerator()
+            {
+                var firstAppendEnumerable = this.first as AppendEnumerable<TElement>;
+                throw new NotImplementedException();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return this.GetEnumerator();
+            }
         }
         #endregion
 
-        // ideas:
-        // start with sequence compare
-        // could revert to sequence compare when dictionary is balanced
-        // could build dictionary inline & remove zeros
-        public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
+        //#region ---- AtLeast / AtMost ----
+        //public static bool HasAtLeast<T>(this IEnumerable<T> source, int count)
+        //{
+        //    Throw.IfNull(source, nameof(source));
+        //    Throw.IfOutOfRange(count, nameof(count), min: 0);
+
+        //    int knownCount;
+        //    return TryFastCount(source, out knownCount)
+        //        ? knownCount >= count
+        //        : source.Take(count).Count() == count;
+        //}
+
+        //public static bool HasAtMost<T>(this IEnumerable<T> source, int count)
+        //{
+        //    Throw.IfNull(source, nameof(source));
+        //    Throw.IfOutOfRange(count, nameof(count), min: 0, max: int.MaxValue - 1);
+
+        //    int knownCount;
+        //    return TryFastCount(source, out knownCount)
+        //        ? knownCount <= count
+        //        : source.Take(count + 1).Count() <= count;
+        //}
+        //#endregion
+
+        #region ---- MaxBy / MinBy ----
+        public static T MaxBy<T, TKey>(this IEnumerable<T> source, Func<T, TKey> keySelector, IComparer<TKey> comparer = null)
         {
-            Throw.IfNull(@this, "this");
-            Throw.IfNull(that, "that");
+            Throw.IfNull(source, nameof(source));
+            Throw.IfNull(keySelector, nameof(keySelector));
 
-            int thisCount, thatCount;
-            var hasThisCount = TryFastCount(@this, out thisCount);
-            var hasThatCount = TryFastCount(that, out thatCount);
+            var comparerToUse = comparer ?? Comparer<TKey>.Default;
 
-            int maxRemainingItemsToProcess;
-            if (hasThisCount)
+            var maxKey = default(TKey);
+            var max = default(T);
+            if (maxKey == null)
             {
-                if (hasThatCount && thisCount != thatCount)
+                foreach (var item in source)
                 {
-                    return false;
+                    var key = keySelector(item);
+                    if (comparer.Compare(key, maxKey) > 0)
+                    {
+                        maxKey = key;
+                        max = item;
+                    }
                 }
-                maxRemainingItemsToProcess = thisCount;
-            }
-            else if (hasThatCount)
-            {
-                maxRemainingItemsToProcess = thatCount;
             }
             else
             {
-                maxRemainingItemsToProcess = -1;
-            }
-
-            var cmp = comparer ?? EqualityComparer<TElement>.Default;
-
-            using (var thisEnumerator = @this.GetEnumerator())
-            using (var thatEnumerator = that.GetEnumerator())
-            {
-                while (true)
+                var hasValue = false;
+                foreach (var item in source)
                 {
-                    var thisFinished = !thisEnumerator.MoveNext();
-                    var thatFinished = !thatEnumerator.MoveNext();
-
-                    if (thisFinished)
+                    var key = keySelector(item);
+                    if (hasValue)
                     {
-                        return thatFinished;
-                    }
-                    if (thatFinished)
-                    {
-                        return false;
-                    }
-
-                    if (!cmp.Equals(thisEnumerator.Current, thatEnumerator.Current))
-                    {
-                        break;
-                    }
-
-                    if (maxRemainingItemsToProcess >= 0)
-                    {
-                        --maxRemainingItemsToProcess;
-                    }
-                }
-
-                var dictionary = new Dictionary<TElement, int>(cmp);
-                do
-                {
-                    var thisValue = thisEnumerator.Current;
-                    var thatValue = thatEnumerator.Current;
-                    int thisValueCount, thatValueCount;
-                    
-                    if (dictionary.TryGetValue(thisValue, out thisValueCount))
-                    {
-                        var newCount = thisValueCount + 1;
-                        if (newCount == 0)
+                        if (comparer.Compare(key, maxKey) > 0)
                         {
-                            dictionary.Remove(thisValue);
-                        }
-                        else
-                        {
-                            dictionary[thisValue] = newCount;
+                            maxKey = key;
+                            max = item;
                         }
                     }
                     else
                     {
-                        dictionary.Add(thisValue, 1);
+                        maxKey = key;
+                        max = item;
                     }
-
-
                 }
-                while (true);
-            }
-        }
-
-        private static int UpdateEqualityCheckDictionary<TElement>(TElement element, Dictionary<TElement, int> dictionary, ref int nullCount, int increment)
-        {
-            if (element == null)
-            {
-                var result = increment < 0 
-                    ? nullCount < 0
-                nullCount += increment;
-                return 
-            }
-        }
-
-        private static int GetEqualityDebtDelta(int count, int increment)
-        {
-            return count < 0 
-                ? (increment < 0 ? -1 : 1)
-                : 
-        }
-
-        private static bool TryFastCount<T>(IEnumerable<T> @this, out int count)
-        {
-            var collection = @this as ICollection<T>;
-            if (collection != null)
-            {
-                count = collection.Count;
-                return true;
+                if (!hasValue)
+                {
+                    throw new InvalidOperationException("Sequence contains no elements");
+                }
             }
 
-            var readOnlyCollection = @this as IReadOnlyCollection<T>;
-            if (readOnlyCollection != null)
-            {
-                count = readOnlyCollection.Count;
-                return true;
-            }
-
-            count = -1;
-            return false;
+            return max;
         }
+
+        #endregion
+        // TODO maxby, minby
+
+        //// ideas:
+        //// start with sequence compare
+        //// could revert to sequence compare when dictionary is balanced
+        //// could build dictionary inline & remove zeros
+        //public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
+        //{
+        //    Throw.IfNull(@this, "this");
+        //    Throw.IfNull(that, "that");
+
+        //    int thisCount, thatCount;
+        //    var hasThisCount = TryFastCount(@this, out thisCount);
+        //    var hasThatCount = TryFastCount(that, out thatCount);
+
+        //    int maxRemainingItemsToProcess;
+        //    if (hasThisCount)
+        //    {
+        //        if (hasThatCount && thisCount != thatCount)
+        //        {
+        //            return false;
+        //        }
+        //        maxRemainingItemsToProcess = thisCount;
+        //    }
+        //    else if (hasThatCount)
+        //    {
+        //        maxRemainingItemsToProcess = thatCount;
+        //    }
+        //    else
+        //    {
+        //        maxRemainingItemsToProcess = -1;
+        //    }
+
+        //    var cmp = comparer ?? EqualityComparer<TElement>.Default;
+
+        //    using (var thisEnumerator = @this.GetEnumerator())
+        //    using (var thatEnumerator = that.GetEnumerator())
+        //    {
+        //        while (true)
+        //        {
+        //            var thisFinished = !thisEnumerator.MoveNext();
+        //            var thatFinished = !thatEnumerator.MoveNext();
+
+        //            if (thisFinished)
+        //            {
+        //                return thatFinished;
+        //            }
+        //            if (thatFinished)
+        //            {
+        //                return false;
+        //            }
+
+        //            if (!cmp.Equals(thisEnumerator.Current, thatEnumerator.Current))
+        //            {
+        //                break;
+        //            }
+
+        //            if (maxRemainingItemsToProcess >= 0)
+        //            {
+        //                --maxRemainingItemsToProcess;
+        //            }
+        //        }
+
+        //        var dictionary = new Dictionary<TElement, int>(cmp);
+        //        do
+        //        {
+        //            var thisValue = thisEnumerator.Current;
+        //            var thatValue = thatEnumerator.Current;
+        //            int thisValueCount, thatValueCount;
+                    
+        //            if (dictionary.TryGetValue(thisValue, out thisValueCount))
+        //            {
+        //                var newCount = thisValueCount + 1;
+        //                if (newCount == 0)
+        //                {
+        //                    dictionary.Remove(thisValue);
+        //                }
+        //                else
+        //                {
+        //                    dictionary[thisValue] = newCount;
+        //                }
+        //            }
+        //            else
+        //            {
+        //                dictionary.Add(thisValue, 1);
+        //            }
+
+
+        //        }
+        //        while (true);
+        //    }
+        //}
+
+        //private static int UpdateEqualityCheckDictionary<TElement>(TElement element, Dictionary<TElement, int> dictionary, ref int nullCount, int increment)
+        //{
+        //    if (element == null)
+        //    {
+        //        var result = increment < 0 
+        //            ? nullCount < 0
+        //        nullCount += increment;
+        //        return 
+        //    }
+        //}
+
+        //private static int GetEqualityDebtDelta(int count, int increment)
+        //{
+        //    return count < 0 
+        //        ? (increment < 0 ? -1 : 1)
+        //        : 
+        //}
+
+        //private static bool TryFastCount<T>(IEnumerable<T> @this, out int count)
+        //{
+        //    var collection = @this as ICollection<T>;
+        //    if (collection != null)
+        //    {
+        //        count = collection.Count;
+        //        return true;
+        //    }
+
+        //    var readOnlyCollection = @this as IReadOnlyCollection<T>;
+        //    if (readOnlyCollection != null)
+        //    {
+        //        count = readOnlyCollection.Count;
+        //        return true;
+        //    }
+
+        //    count = -1;
+        //    return false;
+        //}
     }
 }
