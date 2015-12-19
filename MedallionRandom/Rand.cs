@@ -21,7 +21,7 @@ namespace Medallion.Random
         #region ---- Utility Extensions ----
         public static bool NextBoolean(this Random random)
         {
-            return (random.Next() & 1) == 1;
+            return random.NextBits(1) != 0;
         }
 
         public static bool NextBoolean(this Random random, double probability)
@@ -45,16 +45,56 @@ namespace Medallion.Random
 
         public static int NextInt32(this Random random)
         {
-            return ((random.Next() & ushort.MaxValue) << 16) + (random.Next() & ushort.MaxValue);
+            return random.NextBits(32);
         }
 
         public static long NextInt64(this Random random)
         {
-            const long Mask24 = 0xFFFFFF;
+            var nextBitsRandom = random as NextBitsRandom;
+            if (nextBitsRandom != null)
+            {
+                return ((long)nextBitsRandom.NextBits(32) << 32) + nextBitsRandom.NextBits(32);
+            }
 
-            return ((random.Next() & Mask24) << 48)
-                + ((random.Next() & Mask24) << 24)
-                + (random.Next() & ushort.MaxValue);
+            // NextBits(32) for regular Random requires 2 calls to Next(), or 4 calls
+            // total using the method above. Thus, we instead use an approach that requires
+            // only 3 calls
+            return ((long)random.Next30OrFewerBits(22) << 42)
+                + ((long)random.Next30OrFewerBits(21) << 21)
+                + random.Next30OrFewerBits(21);
+        }
+
+        private static int NextBits(this Random random, int bits)
+        {
+            var nextBitsRandom = random as NextBitsRandom;
+            if (nextBitsRandom != null)
+            {
+                return nextBitsRandom.NextBits(bits);
+            }
+
+            // simulate with native random methods. 32 bits requires [int.MinValue, int.MaxValue]
+            // and 31 bits requires [0, int.MaxValue]
+            
+            // 30 or fewer bits needs only one call
+            if (bits <= 30)
+            {
+                return random.Next30OrFewerBits(bits);
+            }
+            
+            var upperBits = random.Next30OrFewerBits(bits - 16) << 16;
+            var lowerBits = random.Next30OrFewerBits(16);
+            return upperBits + lowerBits;
+        }
+
+        private static int Next30OrFewerBits(this Random random, int bits)
+        {
+            // the simplest underlying call in Random is Next(), which gives us [0, int.MaxValue - 1).
+            // That's not quite 31 bits, but if we discard the lowest bit, we get [0, 2^30), or 30 bits.
+
+            // Note that we'll prefer to discard low bits throughout, since according to 
+            // http://rosettacode.org/wiki/Subtractive_generator the low bits are less random
+
+            return random.Next() >> (31 - bits);
         }
 
         #region ---- Streams ----
@@ -157,6 +197,52 @@ namespace Medallion.Random
             }
         }
         #endregion
+        #endregion
+
+        #region ---- Gaussian ----
+        public static double NextGaussian(this Random random)
+        {
+            var nextBitsRandom = random as NextBitsRandom;
+            if (nextBitsRandom != null)
+            {
+                return nextBitsRandom.NextGaussian();
+            }
+
+            double result, ignored;
+            random.NextTwoGaussians(out result, out ignored);
+            return result;
+        }
+
+        public static IEnumerable<double> NextGaussians(this Random random)
+        {
+            return NextGaussiansIterator(random);
+        }
+
+        private static IEnumerable<double> NextGaussiansIterator(Random random)
+        {
+            while (true)
+            {
+                double next, nextNext;
+                random.NextTwoGaussians(out next, out nextNext);
+                yield return next;
+                yield return nextNext;
+            }
+        }
+
+        private static void NextTwoGaussians(this Random random, out double value1, out double value2)
+        {
+            double v1, v2, s;
+            do
+            {
+                v1 = 2 * random.NextDouble() - 1;   // between -1.0 and 1.0
+                v2 = 2 * random.NextDouble() - 1;   // between -1.0 and 1.0
+                s = v1 * v1 + v2 * v2;
+            } while (s >= 1 || s == 0);
+            double multiplier = Math.Sqrt(-2 * Math.Log(s) / s);
+
+            value1 = v1* multiplier;
+            value2 = v2 * multiplier; 
+        }
         #endregion
 
         #region ---- ThreadLocal ----
@@ -415,6 +501,7 @@ namespace Medallion.Random
             }
             #endregion
 
+            // todo remove
             #region ---- Java Methods ----
             public bool NextBoolean()
             {
@@ -437,16 +524,10 @@ namespace Medallion.Random
                     return result;
                 }
 
-                double v1, v2, s;
-                do
-                {
-                    v1 = 2 * this.NextDouble() - 1;   // between -1.0 and 1.0
-                    v2 = 2 * this.NextDouble() - 1;   // between -1.0 and 1.0
-                    s = v1 * v1 + v2 * v2;
-                } while (s >= 1 || s == 0);
-                double multiplier = Math.Sqrt(-2 * Math.Log(s) / s);
-                this.nextNextGaussian = v2 * multiplier;
-                return v1 * multiplier;
+                double next, nextNext;
+                this.NextTwoGaussians(out next, out nextNext);
+                this.nextNextGaussian = nextNext;
+                return next;
             }
 
             public int NextInt32()
@@ -488,6 +569,7 @@ namespace Medallion.Random
                 // that don't call anything we've overloaded
                 : base(unchecked((int)seed))
             {
+                // this is based on "initialScramble()" in the Java implementation
                 this.seed = (seed ^ 0x5DEECE66DL) & ((1L << 48) - 1);
             }
 
