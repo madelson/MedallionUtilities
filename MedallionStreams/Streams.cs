@@ -24,6 +24,7 @@ namespace Medallion.IO
         public static Stream Take(this Stream stream, long count, bool leaveOpen = false)
         {
             Throw.IfNull(stream, nameof(stream));
+            Throw.If(!stream.CanRead, nameof(stream) + " must be readable");
             Throw.IfOutOfRange(count, nameof(count), min: 0);
 
             return new TakeStream(stream, count, leaveOpen);
@@ -105,22 +106,21 @@ namespace Medallion.IO
             return new ConcatStream(first, second);
         }
 
-        private sealed class ConcatStream : Stream
+        private sealed class ConcatStream : StreamBase
         {
             private readonly Stream first, second;
             private IReadOnlyList<Stream> cachedStreams;
             private int currentStreamIndex;
 
             public ConcatStream(Stream first, Stream second)
+                : base(StreamCapabilities.Read)
             {
                 this.first = first;
                 this.second = second;
             }
 
-            public override int Read(byte[] buffer, int offset, int count)
+            protected override int InternalRead(byte[] buffer, int offset, int count)
             {
-                // todo arg checks
-
                 var streams = this.GetStreams();
 
                 while (true)
@@ -181,30 +181,92 @@ namespace Medallion.IO
         #region ---- Byte Enumerables ----
         public static Stream AsStream(IEnumerable<byte> bytes)
         {
+            Throw.IfNull(bytes, nameof(bytes));
 
+            return new ByteEnumerableStream(bytes);
+        }
+
+        private sealed class ByteEnumerableStream : StreamBase
+        {
+            private readonly IEnumerable<byte> bytes;
+            private IEnumerator<byte> enumerator;
+
+            public ByteEnumerableStream(IEnumerable<byte> bytes)
+                : base(StreamCapabilities.Read)
+            {
+                this.bytes = bytes;
+            }
+
+            protected override int InternalRead(byte[] buffer, int offset, int count)
+            {
+                var enumerator = this.enumerator ?? (this.enumerator = this.bytes.GetEnumerator());
+                
+                for (var bytesRead = 0; bytesRead < count; ++bytesRead)
+                {
+                    if (!enumerator.MoveNext())
+                    {
+                        return bytesRead;
+                    }
+                    buffer[offset + bytesRead] = enumerator.Current;
+                }
+
+                return count;
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && this.enumerator != null)
+                {
+                    this.enumerator.Dispose();
+                }
+            }
         }
 
         public static IEnumerable<byte> AsEnumerable(this Stream stream, bool leaveOpen = false)
         {
+            Throw.IfNull(stream, nameof(stream));
+
+            return ByteIterator(stream, leaveOpen);
+        }
+
+        private static IEnumerable<byte> ByteIterator(Stream stream, bool leaveOpen)
+        {
+            using (leaveOpen ? null : stream)
+            {
+                var buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    for (var i = 0; i < bytesRead; ++i)
+                    {
+                        yield return buffer[i];
+                    }
+                }
+            }
         }
         #endregion
 
         #region ---- Replace ----
         public static Stream Replace(this Stream stream, IReadOnlyList<byte> sequence, IReadOnlyList<byte> replacement, bool leaveOpen = false)
         {
-
         }
+
+        
         #endregion
 
         #region ---- Random ----
         public static Stream AsStream(this Random random)
         {
+            Throw.IfNull(random, nameof(random));
 
+            return new RandomStream(random.NextBytes);
         } 
 
         public static Stream AsStream(this RandomNumberGenerator randomNumberGenerator)
         {
+            Throw.IfNull(randomNumberGenerator, nameof(randomNumberGenerator));
 
+            return new RandomStream(randomNumberGenerator.GetBytes);
         }
 
         private sealed class RandomStream : StreamBase

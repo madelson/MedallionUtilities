@@ -263,133 +263,207 @@ namespace Medallion.Collections
         #endregion
         // TODO maxby, minby
 
-        //// ideas:
-        //// start with sequence compare
-        //// could revert to sequence compare when dictionary is balanced
-        //// could build dictionary inline & remove zeros
-        //public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
-        //{
-        //    Throw.IfNull(@this, "this");
-        //    Throw.IfNull(that, "that");
+        // ideas:
+        // start with sequence compare
+        // could revert to sequence compare when dictionary is balanced
+        // could build dictionary inline & remove zeros
+        public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
+        {
+            Throw.IfNull(@this, "this");
+            Throw.IfNull(that, "that");
 
-        //    int thisCount, thatCount;
-        //    var hasThisCount = TryFastCount(@this, out thisCount);
-        //    var hasThatCount = TryFastCount(that, out thatCount);
+            int thisCount, thatCount;
+            var hasThisCount = TryFastCount(@this, out thisCount);
+            bool hasThatCount;
+            if (hasThisCount)
+            {
+                hasThatCount = TryFastCount(that, out thatCount);
+                if (hasThatCount)
+                {
+                    if (thisCount != thatCount)
+                    {
+                        return false;
+                    }
+                    if (thisCount == 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+            else
+            {
+                hasThatCount = false;
+            }
 
-        //    int maxRemainingItemsToProcess;
-        //    if (hasThisCount)
-        //    {
-        //        if (hasThatCount && thisCount != thatCount)
-        //        {
-        //            return false;
-        //        }
-        //        maxRemainingItemsToProcess = thisCount;
-        //    }
-        //    else if (hasThatCount)
-        //    {
-        //        maxRemainingItemsToProcess = thatCount;
-        //    }
-        //    else
-        //    {
-        //        maxRemainingItemsToProcess = -1;
-        //    }
+            var cmp = comparer ?? EqualityComparer<TElement>.Default;
 
-        //    var cmp = comparer ?? EqualityComparer<TElement>.Default;
+            var itemsEnumerated = 0;
+            using (var thisEnumerator = @this.GetEnumerator())
+            using (var thatEnumerator = that.GetEnumerator())
+            {
+                while (true)
+                {
+                    var thisFinished = !thisEnumerator.MoveNext();
+                    var thatFinished = !thatEnumerator.MoveNext();
 
-        //    using (var thisEnumerator = @this.GetEnumerator())
-        //    using (var thatEnumerator = that.GetEnumerator())
-        //    {
-        //        while (true)
-        //        {
-        //            var thisFinished = !thisEnumerator.MoveNext();
-        //            var thatFinished = !thatEnumerator.MoveNext();
+                    if (thisFinished)
+                    {
+                        return thatFinished;
+                    }
+                    if (thatFinished)
+                    {
+                        return false;
+                    }
 
-        //            if (thisFinished)
-        //            {
-        //                return thatFinished;
-        //            }
-        //            if (thatFinished)
-        //            {
-        //                return false;
-        //            }
+                    ++itemsEnumerated;
 
-        //            if (!cmp.Equals(thisEnumerator.Current, thatEnumerator.Current))
-        //            {
-        //                break;
-        //            }
+                    if (!cmp.Equals(thisEnumerator.Current, thatEnumerator.Current))
+                    {
+                        break;
+                    }
+                }
 
-        //            if (maxRemainingItemsToProcess >= 0)
-        //            {
-        //                --maxRemainingItemsToProcess;
-        //            }
-        //        }
+                Dictionary<TElement, int> elementCounts;
+                IEnumerator<TElement> probeSide;
+                if (hasThisCount)
+                {
+                    probeSide = thisEnumerator;
+                    var remaining = thisCount - itemsEnumerated;
+                    if (hasThatCount)
+                    {
+                        elementCounts = new Dictionary<TElement, int>(capacity: remaining, comparer: cmp)
+                        {
+                            { thatEnumerator.Current, 1 }
+                        };
+                        while (thatEnumerator.MoveNext())
+                        {
+                            elementCounts.IncrementCount(thatEnumerator.Current);
+                        }
+                    }
+                    else
+                    {
+                        elementCounts = TryBuildElementCountsWithKnownCount(thatEnumerator, remaining);
+                    }
+                }
+                else if (TryFastCount(that, out thatCount))
+                {
+                    probeSide = thatEnumerator;
+                    var remaining = thatCount - itemsEnumerated;
+                    elementCounts = TryBuildElementCountsWithKnownCount(thisEnumerator, remaining);
+                }
+                else
+                {
+                    probeSide = thisEnumerator;
+                    elementCounts = new Dictionary<TElement, int>(cmp)
+                    {
+                        { thatEnumerator.Current, 1 }
+                    };
+                    while (thatEnumerator.MoveNext())
+                    {
+                        elementCounts.IncrementCount(thatEnumerator.Current);
+                    }
+                }
 
-        //        var dictionary = new Dictionary<TElement, int>(cmp);
-        //        do
-        //        {
-        //            var thisValue = thisEnumerator.Current;
-        //            var thatValue = thatEnumerator.Current;
-        //            int thisValueCount, thatValueCount;
-                    
-        //            if (dictionary.TryGetValue(thisValue, out thisValueCount))
-        //            {
-        //                var newCount = thisValueCount + 1;
-        //                if (newCount == 0)
-        //                {
-        //                    dictionary.Remove(thisValue);
-        //                }
-        //                else
-        //                {
-        //                    dictionary[thisValue] = newCount;
-        //                }
-        //            }
-        //            else
-        //            {
-        //                dictionary.Add(thisValue, 1);
-        //            }
+                if (elementCounts == null)
+                {
+                    return false;
+                }
 
+                do
+                {
+                    if (!elementCounts.TryDecrementCount(probeSide.Current))
+                    {
+                        return false;
+                    }
+                }
+                while (probeSide.MoveNext());
 
-        //        }
-        //        while (true);
-        //    }
-        //}
+                return elementCounts.Count == 0;
+            }
+        }
 
-        //private static int UpdateEqualityCheckDictionary<TElement>(TElement element, Dictionary<TElement, int> dictionary, ref int nullCount, int increment)
-        //{
-        //    if (element == null)
-        //    {
-        //        var result = increment < 0 
-        //            ? nullCount < 0
-        //        nullCount += increment;
-        //        return 
-        //    }
-        //}
+        private static Dictionary<TKey, int> TryBuildElementCountsWithKnownCount<TKey>(
+            IEnumerator<TKey> elements, 
+            int remaining)
+        {
+            if (remaining == 0)
+            {
+                return null;
+            }
 
-        //private static int GetEqualityDebtDelta(int count, int increment)
-        //{
-        //    return count < 0 
-        //        ? (increment < 0 ? -1 : 1)
-        //        : 
-        //}
+            const int MaxInitialElementCountsCapacity = 1024;
+            var elementCounts = new Dictionary<TKey, int>(capacity: Math.Min(remaining, MaxInitialElementCountsCapacity))
+            {
+                { elements.Current, 1 }
+            };
+            while (elements.MoveNext())
+            {
+                if (--remaining < 0)
+                {
+                    return null;
+                }
+                elementCounts.IncrementCount(elements.Current);
+            }
 
-        //private static bool TryFastCount<T>(IEnumerable<T> @this, out int count)
-        //{
-        //    var collection = @this as ICollection<T>;
-        //    if (collection != null)
-        //    {
-        //        count = collection.Count;
-        //        return true;
-        //    }
+            if (remaining > 0)
+            {
+                return null;
+            }
 
-        //    var readOnlyCollection = @this as IReadOnlyCollection<T>;
-        //    if (readOnlyCollection != null)
-        //    {
-        //        count = readOnlyCollection.Count;
-        //        return true;
-        //    }
+            return elementCounts;
+        }
 
-        //    count = -1;
-        //    return false;
-        //}
+        private static void IncrementCount<TKey>(this Dictionary<TKey, int> elementCounts, TKey key)
+        {
+            int existingCount;
+            if (elementCounts.TryGetValue(key, out existingCount))
+            {
+                elementCounts[key] = existingCount + 1;
+            }
+            else
+            {
+                elementCounts.Add(key, 1);
+            }
+        }
+
+        private static bool TryDecrementCount<TKey>(this Dictionary<TKey, int> elementCounts, TKey key)
+        {
+            int existingCount;
+            if (!elementCounts.TryGetValue(key, out existingCount))
+            {
+                return false;
+            }
+
+            if (existingCount == 1)
+            {
+                elementCounts.Remove(key);
+            }
+            else
+            {
+                elementCounts[key] = existingCount - 1;
+            }
+            
+            return true;
+        }
+
+        private static bool TryFastCount<T>(IEnumerable<T> @this, out int count)
+        {
+            var collection = @this as ICollection<T>;
+            if (collection != null)
+            {
+                count = collection.Count;
+                return true;
+            }
+
+            var readOnlyCollection = @this as IReadOnlyCollection<T>;
+            if (readOnlyCollection != null)
+            {
+                count = readOnlyCollection.Count;
+                return true;
+            }
+
+            count = -1;
+            return false;
+        }
     }
 }

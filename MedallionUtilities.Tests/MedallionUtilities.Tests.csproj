@@ -56,9 +56,14 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Collections\CollectionEqualsTest.cs" />
     <Compile Include="Enums\EnumTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Random\BirthdayParadoxTest.cs" />
     <Compile Include="Random\JavaRandomTest.cs" />
+    <Compile Include="Random\RandTest.cs" />
+    <Compile Include="Random\WeightedCoinFlipTest.cs" />
+    <Compile Include="TestHelper.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,58 +12,55 @@ namespace Medallion.Collections
     // TODO
     // CB, ROCB, DB, RODB
 
-    public abstract class CollectionBase<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+    public abstract class CollectionBase<TElement> : IReadOnlyCollection<TElement>, ICollection
     {
         public abstract int Count { get; }
-        
-        protected abstract bool IsReadOnly { get; }
-
-        bool ICollection<T>.IsReadOnly { get { return this.IsReadOnly; } }
 
         bool ICollection.IsSynchronized { get { return false; } }
 
-        private object syncRoot;
-
+        private object _syncRoot;
         object ICollection.SyncRoot
         {
-            get
-            {
-                var syncRoot = this.syncRoot;
-                return syncRoot == null
-                    ? Interlocked.CompareExchange(ref this.syncRoot, new object(), comparand: null)
-                    : syncRoot;
-            }
-        }
-
-        public abstract void Add(T item);
-
-        public abstract void Clear();
-
-        bool ICollection<T>.Contains(T item)
-        {
-            return Enumerable.Contains(this, item);
+            get { return LazyInitializer.EnsureInitialized(ref this._syncRoot, () => new object()); }
         }
 
         void ICollection.CopyTo(Array array, int index)
         {
-            throw new NotImplementedException();
+            Throw.IfNull(array, nameof(array));
+            Throw.If(array.Rank != 1, nameof(array) + " must be one-dimensional");
+            Throw.If(index < 0, nameof(index) + "must be non-negative");
+            Throw.If(index + this.Count > array.Length, nameof(array) + " is not long enough");
+
+            var i = index;
+            foreach (var element in this)
+            {
+                array.SetValue(element, i++);
+            }
         }
 
-        void ICollection<T>.CopyTo(T[] array, int arrayIndex)
+        IEnumerator IEnumerable.GetEnumerator() { return this.InternalGetEnumerator(); }
+
+        public IEnumerator<TElement> GetEnumerator() { return this.InternalGetEnumerator(); }
+
+        protected abstract IEnumerator<TElement> InternalGetEnumerator();
+
+        public abstract bool Contains(TElement item);
+
+        internal static NotSupportedException ReadOnly([CallerMemberName] string member = null)
         {
-            throw new NotImplementedException();
+            return new NotSupportedException($"{member} is not supported: the collection is read-only");
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        internal static void CopyToHelper(IReadOnlyCollection<TElement> collection, TElement[] array, int arrayIndex)
         {
-            return this.AsEnumerable().GetEnumerator();
-        }
+            Throw.IfNull(array, nameof(array));
+            Throw.If(arrayIndex + collection.Count > array.Length, nameof(array) + " is not long enough");
 
-        public abstract IEnumerator<T> GetEnumerator();
-
-        bool ICollection<T>.Remove(T item)
-        {
-            throw new NotImplementedException();
+            var i = arrayIndex;
+            foreach (var element in collection)
+            {
+                array[i++] = element;
+            }
         }
     }
 }

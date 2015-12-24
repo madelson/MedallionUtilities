@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+// todo namespace change to avoid conflict with SystemRandom
 namespace Medallion.Random
 {
     using NullGuard;
@@ -11,10 +12,8 @@ namespace Medallion.Random
     using System.Security.Cryptography;
     using System.Threading;
     using Random = System.Random;
-
-    // java methods
-    // nextgaussian
-
+    
+    // todo probably remove
     [NullGuard(ValidationFlags.Arguments)]
     public static class Rand
     {
@@ -73,7 +72,7 @@ namespace Medallion.Random
 
             // simulate with native random methods. 32 bits requires [int.MinValue, int.MaxValue]
             // and 31 bits requires [0, int.MaxValue]
-            
+
             // 30 or fewer bits needs only one call
             if (bits <= 30)
             {
@@ -85,19 +84,42 @@ namespace Medallion.Random
             return upperBits + lowerBits;
         }
 
+        private static readonly int[] Next30OrFewerBitsRejectThresholds = Enumerable.Range(0, count: 31)
+            .Select(bits => int.MaxValue - (int.MaxValue % (1 << bits)))
+            .ToArray();
+
         private static int Next30OrFewerBits(this Random random, int bits)
         {
+            // a range of bits is [0, 2^bits - 1)
+            var maxValue = (1 << bits) - 1;
+
+            int sample, val;
+            do
+            {
+                // take a sample [0, 2^31 - 2)
+                sample = random.Next();
+                // derive a value in [0, maxValue)
+                val = sample % (maxValue + 1);
+            }
+            // rejects biased values. For example, if Next() returned [0, 10)
+            // and we were looking for a number in [0, 4), we'd reject samples of
+            // 8 or 9 to ensure that each number in the desired range has an even chance
+            // of turning up
+            while (sample - val + maxValue < 0);
+
+            return val;
+
             // the simplest underlying call in Random is Next(), which gives us [0, int.MaxValue - 1).
             // That's not quite 31 bits, but if we discard the lowest bit, we get [0, 2^30), or 30 bits.
 
             // Note that we'll prefer to discard low bits throughout, since according to 
             // http://rosettacode.org/wiki/Subtractive_generator the low bits are less random
 
-            return random.Next() >> (31 - bits);
+            //return random.Next() >> (31 - bits);
         }
         #endregion
 
-        #region ---- Other Extensions ----
+        #region ---- Weighted Coin Flip ----
         public static bool NextBoolean(this Random random, double probability)
         {
             if (probability == 0)
@@ -116,7 +138,9 @@ namespace Medallion.Random
 
             return random.NextDouble() < probability;
         }
+        #endregion
 
+        #region ---- Byte Stream ----
         public static IEnumerable<byte> NextBytes(this Random random)
         {
             return NextBytesIterator(random);
@@ -244,8 +268,8 @@ namespace Medallion.Random
             double v1, v2, s;
             do
             {
-                v1 = 2 * random.NextDouble() - 1;   // between -1.0 and 1.0
-                v2 = 2 * random.NextDouble() - 1;   // between -1.0 and 1.0
+                v1 = 2 * random.NextDouble() - 1; // between -1.0 and 1.0
+                v2 = 2 * random.NextDouble() - 1; // between -1.0 and 1.0
                 s = v1 * v1 + v2 * v2;
             } while (s >= 1 || s == 0);
             double multiplier = Math.Sqrt(-2 * Math.Log(s) / s);
@@ -294,6 +318,11 @@ namespace Medallion.Random
             public override int Next()
             {
                 this.VerifyThread();
+                return base.Next();
+            }
+
+            public int UnsafeNext()
+            {
                 return base.Next();
             }
 
@@ -364,12 +393,14 @@ namespace Medallion.Random
         // TODO look at how java does this
         public static Random Create()
         {
-            var combinedSeed = unchecked((31 * Environment.TickCount) + Current.Next());
+            var ticks = Environment.TickCount;
+
+            var combinedSeed = unchecked((31 * Environment.TickCount) + ThreadLocalRandom.UnsafeNext());
             return new Random(combinedSeed);
         }
         #endregion
 
-        #region ---- Stream Interop ----
+        #region ---- System.IO.Stream Interop ----
         public static Random FromStream(Stream randomBytes)
         {
             return new StreamRandomNumberGenerator(randomBytes).AsRandom();
@@ -387,7 +418,7 @@ namespace Medallion.Random
 
             public override void GetBytes(byte[] data)
             {
-                var bytesReadBeforeLastSeek = 0;
+                var justResetStream = false;
                 var bytesRead = 0;
                 while (bytesRead < data.Length)
                 {
@@ -401,7 +432,7 @@ namespace Medallion.Random
                         {
                             throw new InvalidOperationException("Cannot produce additional random bytes because the given stream is exhausted and does not support seeking");
                         }
-                        if (bytesReadBeforeLastSeek == 0)
+                        if (justResetStream)
                         {
                             // prevents us from going into an infinite loop seeking back to the beginning of an empty stream
                             throw new InvalidOperationException("Cannot produce additional random bytes because the given stream is empty");
@@ -409,11 +440,12 @@ namespace Medallion.Random
 
                         // reset the stream
                         this.stream.Seek(0, SeekOrigin.Begin);
-                        bytesReadBeforeLastSeek = bytesRead;
+                        justResetStream = true;
                     }
                     else
                     {
                         bytesRead += nextBytesRead;
+                        justResetStream = false;
                     }
                 }
             }
@@ -511,7 +543,7 @@ namespace Medallion.Random
             {
                 for (int i = 0; i < buffer.Length;)
                 {
-                    for (int rand = this.NextInt32(), n = Math.Min(buffer.Length - i, 4);
+                    for (int rand = this.NextBits(32), n = Math.Min(buffer.Length - i, 4);
                          n-- > 0; 
                          rand >>= 8)
                     {
@@ -595,91 +627,45 @@ namespace Medallion.Random
         }
 
         [NullGuard(ValidationFlags.Arguments)]
-        private sealed class RandomNumberGeneratorRandom : Random
+        private sealed class RandomNumberGeneratorRandom : NextBitsRandom
         {
             private const int BufferLength = 512;
 
             private readonly RandomNumberGenerator rand;
             private readonly byte[] buffer = new byte[BufferLength];
-            private int nextByteIndex;
+            private int nextByteIndex = BufferLength;
 
             internal RandomNumberGeneratorRandom(RandomNumberGenerator randomNumberGenerator)
-                : base(Seed: 0) // avoid having to generate a time-based seed 
+                : base(seed: 0) // avoid having to generate a time-based seed 
             {
                 this.rand = randomNumberGenerator;
             }
-
-            private int BufferSize { get { return BufferLength - this.nextByteIndex; } }
-
-            // From MSDN https://msdn.microsoft.com/en-us/library/system.random%28v=vs.110%29.aspx?f=255&MSPPError=-2147217396
-            // You can implement your own random number generator by inheriting from the Random class and supplying 
-            // your random number generation algorithm.To supply your own algorithm, you must override the Sample method, 
-            // which implements the random number generation algorithm.You should also override the Next(), Next(Int32, Int32), 
-            // and NextBytes methods to ensure that they call your overridden Sample method.You don't have to override the 
-            // Next(Int32) and NextDouble methods
-
-            protected override double Sample()
+            
+            internal override int NextBits(int bits)
             {
-                // based on https://docs.oracle.com/javase/8/docs/api/java/util/Random.html#nextDouble--
-                return (((long)this.NextBits(26) << 27) + this.NextBits(27)) / (double)(1L << 53);
-            }
-
-            public override int Next()
-            {
-                return checked((int)this.InternalNext(maxValue: int.MaxValue));
-            }
-
-            public override int Next(int minValue, int maxValue)
-            {
-                if (minValue > maxValue)
+                // unsigned so we can unsigned shift below
+                uint result = 0;
+                checked
                 {
-                    throw new ArgumentOutOfRangeException(nameof(minValue), $"{nameof(minValue)} ({minValue}) must be <= {nameof(maxValue)} ({maxValue}). ");
-                }
-                
-                // this optimization for powers of two from https://docs.oracle.com/javase/8/docs/api/java/util/Random.html#nextInt-int-
-                // We leave this outside of InternalNext() because Next() won't ever benefit from it
-                var difference = (long)maxValue - minValue;
-                unchecked
-                {
-                    if (difference <= int.MaxValue && (difference & -difference) == difference)
+                    for (var i = 0; i < bits; i += 8)
                     {
-                        return minValue + (int)((difference * this.NextBits(31)) >> 31);
+                        if (this.nextByteIndex == BufferLength)
+                        {
+                            this.rand.GetBytes(this.buffer);
+                            this.nextByteIndex = 0;
+                        }
+                        result += (uint)this.buffer[this.nextByteIndex++] << i;
                     }
                 }
-
-                return checked((int)(minValue + this.InternalNext(maxValue: difference)));
-            }
-
-            private long InternalNext(long maxValue)
-            {
-                // based on .NET random's implementation of Next(int, int). I'm assuming that our Sample()
-                // implementation is good enough to work with large ranges (given that it divides by 2^53 and
-                // the biggest range we'll ever get here is 2*int.MaxValue + 1, or ~2^32)
-                return (long)(maxValue * this.Sample());
-            }
-
-            // based on the java Random API: bits must be in [0..32]
-            private int NextBits(int bits)
-            {
-                if ((this.BufferSize * 8) < bits)
-                {
-                    this.rand.GetBytes(buffer);
-                    this.nextByteIndex = 0;
-                }
-
-                var nextFourBytes = BitConverter.ToUInt32(this.buffer, this.nextByteIndex);
-                this.nextByteIndex += 4;
-
-                // the fact that we're uint here means we don't have to worry about sign-extending shift behavior
-                var nextBits = nextFourBytes >> (32 - bits);
-
+                
+                var nextBits = result >> (32 - bits); 
                 return unchecked((int)nextBits);
             }
 
             // we override this for performance reasons, since we can call the underlying RNG's NextBytes() method directly
             public override void NextBytes(byte[] buffer)
             {
-                if (buffer.Length <= this.BufferSize)
+                if (buffer.Length <= (BufferLength - this.nextByteIndex))
                 {
                     for (var i = this.nextByteIndex; i < buffer.Length; ++i)
                     {

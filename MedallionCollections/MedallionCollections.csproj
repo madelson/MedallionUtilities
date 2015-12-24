@@ -48,11 +48,16 @@
     <Compile Include="CollectionBase.cs" />
     <Compile Include="CollectionHelper.cs" />
     <Compile Include="Comparers.cs" />
+    <Compile Include="DictionaryBase.cs" />
     <Compile Include="Empty.cs" />
     <Compile Include="Empty`.cs" />
     <Compile Include="Empty``.cs" />
     <Compile Include="EqualityComparers.cs" />
+    <Compile Include="MutableCollectionBase.cs" />
+    <Compile Include="MutableDictionaryBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ReadOnlyCollectionBase.cs" />
+    <Compile Include="ReadOnlyDictionaryBase.cs" />
     <Compile Include="Traverse.cs" />
   </ItemGroup>
   <ItemGroup>
