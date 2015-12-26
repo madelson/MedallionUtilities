@@ -52,7 +52,7 @@ namespace Medallion.Reflection
         #endregion
 
         #region ---- CanBeNull ----
-        public bool CanBeNull(this Type type)
+        public static bool CanBeNull(this Type type)
         {
             Throw.IfNull(type, "type");
 
@@ -61,7 +61,7 @@ namespace Medallion.Reflection
         #endregion
 
         #region ---- GetDefaultValue ----
-        public object GetDefaultValue(this Type type)
+        public static object GetDefaultValue(this Type type)
         {
             Throw.IfNull(type, "type");
 
@@ -70,7 +70,7 @@ namespace Medallion.Reflection
         #endregion
 
         #region ---- MemberEquals ----
-        public bool MemberEquals(this MemberInfo @this, MemberInfo that)
+        public static bool MemberEquals(this MemberInfo @this, MemberInfo that)
         {
             if (@this == that)
             {
