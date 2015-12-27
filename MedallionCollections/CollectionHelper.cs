@@ -40,148 +40,204 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Append ----
-        //public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> first, IEnumerable<TElement> second)
-        //{
-
-        //}
-
-        //public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> sequence, TElement next)
-        //{
-
-        //}
-
-        private static IEnumerator<TElement> AppendEnumerableIterator<TElement>(IAppendEnumerable<TElement> append)
+        public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> first, IEnumerable<TElement> second)
         {
-            // special case when we don't have nesting to avoid allocating the stack
-            if (!(append.First is IAppendEnumerable<TElement>)
-                && !(append.Second is IAppendEnumerable<TElement>))
+            Throw.IfNull(first, nameof(first));
+            Throw.IfNull(second, nameof(second));
+
+            return new AppendEnumerable<TElement>(first, second);
+        }
+
+        public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> sequence, TElement next)
+        {
+            Throw.IfNull(sequence, nameof(sequence));
+
+            return new AppendOneEnumerable<TElement>(sequence, next);
+        }
+
+        public static IEnumerable<TElement> Prepend<TElement>(this IEnumerable<TElement> second, IEnumerable<TElement> first)
+        {
+            return first.Append(second);
+        }
+
+        public static IEnumerable<TElement> Prepend<TElement>(this IEnumerable<TElement> sequence, TElement previous)
+        {
+            Throw.IfNull(sequence, nameof(sequence));
+
+            return new PrependOneEnumerable<TElement>(previous, sequence);
+        }
+
+        private interface IAppendEnumerable<out TElement>
+        {
+            IEnumerable<TElement> PreviousElements { get; }
+            TElement PreviousElement { get; }
+            IEnumerable<TElement> NextElements { get; }
+            TElement NextElement { get; }
+        }
+
+        private abstract class AppendEnumerableBase<TElement> : IAppendEnumerable<TElement>, IEnumerable<TElement>
+        {
+            public abstract TElement NextElement { get; }
+            public abstract IEnumerable<TElement> NextElements { get; }
+            public abstract TElement PreviousElement { get; }
+            public abstract IEnumerable<TElement> PreviousElements { get; }
+
+            IEnumerator IEnumerable.GetEnumerator()
             {
-                foreach (var element in append.First)
+                return this.AsEnumerable().GetEnumerator();
+            }
+
+            IEnumerator<TElement> IEnumerable<TElement>.GetEnumerator()
+            {
+                // we special case the basic case so that it doesn't even need to create the stack
+                if (!(this.PreviousElements is IAppendEnumerable<TElement>)
+                    && !(this.NextElements is IAppendEnumerable<TElement>))
                 {
-                    yield return element;
-                }
-                if (append.Second != null)
-                {
-                    yield return append.Next;
-                }
-                else
-                {
-                    foreach (var element in append.Second)
+                    if (this.PreviousElements != null)
                     {
-                        yield return element;
+                        foreach (var element in this.PreviousElements)
+                        {
+                            yield return element;
+                        }
+                    }
+                    else
+                    {
+                        yield return this.PreviousElement;
+                    }
+
+                    if (this.NextElements != null)
+                    {
+                        foreach (var element in this.NextElements)
+                        {
+                            yield return element;
+                        }
+                    }
+                    else
+                    {
+                        yield return this.NextElement;
                     }
                 }
 
-                yield break;
-            }
+                // the algorithm here keeps 2 pieces of state:
+                // (1) the current node in the append enumerable binary tree
+                // (2) a stack of nodes we have to come back to to process the right subtree (nexts)
+                // the steps are as follows, starting with current as the root of the tree:
+                // (1) if the left subtree is a leaf, yield it
+                // (2) otherwise, push current on the stack and set current = the left subtree
+                // (3) if the right subtree is a leaf, yield it
+                // (4) otherwise, set current = right subtree
+                // (5) if both subtrees were leaves, set current = stack.Pop(), or exit if stack is empty
 
-            var stack = new Stack<IAppendEnumerable<TElement>>();
-            stack.Push(append);
-            do
-            {
-                GatherFirstEnumerables(stack.Peek().First, stack);
-
-                var nextAppend = stack.Pop();
-                foreach (var item in nextAppend.First)
+                IAppendEnumerable<TElement> currentAppendEnumerable = this;
+                var enumerableStack = new Stack<IAppendEnumerable<TElement>>();
+                while (true)
                 {
-                    yield return item;
+                    if (currentAppendEnumerable != null)
+                    {
+                        var previous = currentAppendEnumerable.PreviousElements;
+                        if (previous == null)
+                        {
+                            yield return currentAppendEnumerable.PreviousElement;
+                        }
+                        else
+                        {
+                            var previousAppendEnumerable = previous as IAppendEnumerable<TElement>;
+                            if (previousAppendEnumerable != null)
+                            {
+                                enumerableStack.Push(currentAppendEnumerable);
+                                currentAppendEnumerable = previousAppendEnumerable;
+                                continue;
+                            }
+
+                            foreach (var previousElement in currentAppendEnumerable.PreviousElements)
+                            {
+                                yield return previousElement;
+                            }
+                        }
+                    }
+
+                    if (currentAppendEnumerable == null)
+                    {
+                        if (enumerableStack.Count == 0)
+                        {
+                            yield break;
+                        }
+                        currentAppendEnumerable = enumerableStack.Pop();
+                    }
+
+                    var next = currentAppendEnumerable.NextElements;
+                    if (next == null)
+                    {
+                        yield return currentAppendEnumerable.NextElement;
+                    }
+                    else
+                    {
+                        var nextAppendEnumerable = currentAppendEnumerable.NextElements as IAppendEnumerable<TElement>;
+                        if (nextAppendEnumerable != null)
+                        {
+                            currentAppendEnumerable = nextAppendEnumerable;
+                            continue;
+                        }
+
+                        foreach (var nextElement in currentAppendEnumerable.NextElements)
+                        {
+                            yield return nextElement;
+                        }
+                    }
+
+                    currentAppendEnumerable = null;
                 }
-
-
-            }
-            while (stack.Count > 0);
-        }
-
-        private static void GatherFirstEnumerables<TElement>(IEnumerable<TElement> sequence, Stack<IAppendEnumerable<TElement>> stack)
-        {
-            for (var append = sequence as IAppendEnumerable<TElement>; 
-                append != null; 
-                append = append.First as IAppendEnumerable<TElement>)
-            {
-                stack.Push(append);
             }
         }
 
-        private interface IAppendEnumerable<out TElement> : IEnumerable<TElement>
+        private sealed class AppendEnumerable<TElement> : AppendEnumerableBase<TElement>
         {
-            IEnumerable<TElement> First { get; }
-            IEnumerable<TElement> Second { get; }
-            TElement Next { get; }
-        }
+            private readonly IEnumerable<TElement> previous, next;
 
-        private sealed class FirstSecondAppendEnumerable<TElement> : IAppendEnumerable<TElement>
-        {
-            public FirstSecondAppendEnumerable(IEnumerable<TElement> first, IEnumerable<TElement> second)
+            public AppendEnumerable(IEnumerable<TElement> previous, IEnumerable<TElement> next)
             {
-                this.First = first;
-                this.Second = second;
-            }
-
-            public IEnumerable<TElement> First { get; private set; }
-            public IEnumerable<TElement> Second { get; private set; }
-            TElement IAppendEnumerable<TElement>.Next { get { throw new NotSupportedException(); } }
-
-            public IEnumerator<TElement> GetEnumerator()
-            {
-                return AppendEnumerableIterator(this);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return this.GetEnumerator();
-            }
-        }
-
-        private sealed class FirstNextAppendEnumerable<TElement> : IAppendEnumerable<TElement>
-        {
-            public FirstNextAppendEnumerable(IEnumerable<TElement> sequence, TElement next)
-            {
-                this.First = sequence;
-                this.Next = next;
-            }
-
-            public IEnumerable<TElement> First { get; private set; }
-            IEnumerable<TElement> IAppendEnumerable<TElement>.Second { get { return null; } }
-            public TElement Next { get; private set; }
-
-            public IEnumerator<TElement> GetEnumerator()
-            {
-                return AppendEnumerableIterator(this);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return this.GetEnumerator();
-            }
-        }
-
-        private sealed class AppendEnumerable<TElement> : IEnumerable<TElement>
-        {
-            private readonly IEnumerable<TElement> first, second;
-            private readonly TElement next;
-
-            public AppendEnumerable(IEnumerable<TElement> first, IEnumerable<TElement> second)
-            {
-                this.first = first;
-                this.second = second;
-            }
-
-            public AppendEnumerable(IEnumerable<TElement> first, TElement next)
-            {
-                this.first = first;
+                this.previous = previous;
                 this.next = next;
             }
 
-            public IEnumerator<TElement> GetEnumerator()
+            public override TElement NextElement { get { throw new InvalidOperationException(); } }
+            public override IEnumerable<TElement> NextElements { get { return this.next; } }
+            public override TElement PreviousElement { get { throw new InvalidOperationException(); } }
+            public override IEnumerable<TElement> PreviousElements { get { return this.previous; } }
+        }
+
+        private sealed class AppendOneEnumerable<TElement> : AppendEnumerableBase<TElement>
+        {
+            private readonly IEnumerable<TElement> previous;
+            private readonly TElement next;
+
+            public AppendOneEnumerable(IEnumerable<TElement> previous, TElement next)
             {
-                var firstAppendEnumerable = this.first as AppendEnumerable<TElement>;
-                throw new NotImplementedException();
+                this.previous = previous;
+                this.next = next;
             }
 
-            IEnumerator IEnumerable.GetEnumerator()
+            public override TElement NextElement { get { return this.next; } }
+            public override IEnumerable<TElement> NextElements { get { return null; } }
+            public override TElement PreviousElement { get { throw new InvalidOperationException(); } }
+            public override IEnumerable<TElement> PreviousElements { get { return this.previous; } }
+        }
+
+        private sealed class PrependOneEnumerable<TElement> : AppendEnumerableBase<TElement>
+        {
+            private readonly TElement previous;
+            private readonly IEnumerable<TElement> next;
+
+            public PrependOneEnumerable(TElement previous, IEnumerable<TElement> next)
             {
-                return this.GetEnumerator();
+                this.previous = previous;
+                this.next = next;
             }
+
+            public override TElement NextElement { get { throw new InvalidOperationException(); } }
+            public override IEnumerable<TElement> NextElements { get { return this.next; } }
+            public override TElement PreviousElement { get { return this.previous; ; } }
+            public override IEnumerable<TElement> PreviousElements { get { return null; } }
         }
         #endregion
 
@@ -461,6 +517,8 @@ namespace Medallion.Collections
                 count = readOnlyCollection.Count;
                 return true;
             }
+
+            // TODO should we test for ICollection here?
 
             count = -1;
             return false;

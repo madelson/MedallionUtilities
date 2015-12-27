@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
+using System.Collections;
 
 namespace Medallion.Collections
 {
@@ -67,8 +68,19 @@ namespace Medallion.Collections
             new[] { 1, 1, 2, 2, 3, 3, }.CollectionEquals(Sequence(1, 2, 3, 1, 2, 3)).ShouldEqual(true);
             new[] { 1, 1, 2, 2, 3, 3, }.CollectionEquals(Sequence(1, 2, 1, 2, 3, 4)).ShouldEqual(false);
         }
+        
+        [Fact]
+        public void TestSmartBuildSideProbeSideChoice()
+        {
+            var longerButThrows = new CountingEnumerableCollection<int>(ThrowsAt(Enumerable.Range(0, 10), index: 9), count: 10);
+            var shorter = Enumerable.Range(0, 9).Reverse(); // force us into build/probe mode
 
-        // todo more tests to get 100% coverage using ThrowsAt
+            longerButThrows.CollectionEquals(shorter).ShouldEqual(false);
+            shorter.CollectionEquals(longerButThrows).ShouldEqual(false);
+        }
+
+        // TODO we could add more explicit case tests to get full coverage of all branches, but
+        // for now we do get that via fuzz test
 
         [Fact]
         public void FuzzTest()
@@ -127,19 +139,161 @@ namespace Medallion.Collections
             }
         }
 
+        [Fact]
+        public void ComparisonTest()
+        {
+            // large sequence-equal collections
+            var a = Enumerable.Range(0, 1000);
+            var b = a.ToArray();
+
+            long enumerateCount, equalsCount, hashCount,
+                dictEnumerateCount, dictEqualsCount, dictHashCount,
+                sortEnumerateCount, sortEqualsCount, sortHashCount;
+
+            ProfiledEquals(a, b, CollectionHelper.CollectionEquals<int>, out enumerateCount, out equalsCount, out hashCount).ShouldEqual(true);
+            ProfiledEquals(a, b, DictionaryBasedEquals<int>, out dictEnumerateCount, out dictEqualsCount, out dictHashCount);
+            ProfiledEquals(a, b, SortBasedEquals<int>, out sortEnumerateCount, out sortEqualsCount, out sortHashCount);
+            this.output.WriteLine($@"
+                ce: {enumerateCount}, {equalsCount}, {hashCount}
+                dict: {dictEnumerateCount}, {dictEqualsCount}, {dictHashCount}
+                sort: {sortEnumerateCount}, {sortEqualsCount}, {sortHashCount}"
+            );
+        }
+
+        private static bool ProfiledEquals<T>(
+            IEnumerable<T> a, 
+            IEnumerable<T> b,
+            Func<IEnumerable<T>, IEnumerable<T>, IEqualityComparer<T>, bool> equals,
+            out long enumerateCount,
+            out long equalsCount,
+            out long hashCount)
+        {
+            var wrappedA = new CountingEnumerable<T>(a);
+            var wrappedB = b is IReadOnlyCollection<T> ? new CountingEnumerableCollection<T>((IReadOnlyCollection<T>)b) : new CountingEnumerable<T>(b);
+            var comparer = new CountingEqualityComparer<T>();
+            var result = equals(wrappedA, wrappedB, comparer);
+
+            enumerateCount = wrappedA.EnumerateCount + wrappedB.EnumerateCount;
+            equalsCount = comparer.EqualsCount;
+            hashCount = comparer.HashCount;
+            return result;
+        }
+
+        private static bool SortBasedEquals<T>(IEnumerable<T> a, IEnumerable<T> b, IEqualityComparer<T> comparer)
+        {
+            var order = Comparers.Create((T item) => comparer.GetHashCode(item));
+            return a.OrderBy(x => x, order).SequenceEqual(b.OrderBy(x => x, order), comparer);
+        }
+
+        private static bool DictionaryBasedEquals<T>(IEnumerable<T> a, IEnumerable<T> b, IEqualityComparer<T> comparer)
+        {
+            var dictionary = new Dictionary<T, int>(comparer);
+            foreach (var item in a)
+            {
+                int existingCount;
+                if (dictionary.TryGetValue(item, out existingCount))
+                {
+                    dictionary[item] = existingCount + 1;
+                }
+                else
+                {
+                    dictionary.Add(item, 1);
+                }
+            }
+
+            foreach (var item in b)
+            {
+                int count;
+                if (!dictionary.TryGetValue(item, out count))
+                {
+                    return false;
+                }
+                if (count == 1)
+                {
+                    dictionary.Remove(item);
+                }
+                else
+                {
+                    dictionary[item] = count - 1;
+                }
+            }
+
+            return dictionary.Count == 0;
+        }
+
+        private sealed class CountingEqualityComparer<T> : IEqualityComparer<T>
+        {
+            public long EqualsCount { get; private set; }
+            public long HashCount { get; private set; }
+
+            bool IEqualityComparer<T>.Equals(T x, T y)
+            {
+                this.EqualsCount++;
+                return EqualityComparer<T>.Default.Equals(x, y);
+            }
+
+            int IEqualityComparer<T>.GetHashCode(T obj)
+            {
+                this.HashCount++;
+                return EqualityComparer<T>.Default.GetHashCode(obj);
+            }
+        }
+
+        private class CountingEnumerable<T> : IEnumerable<T>
+        {
+            private readonly IEnumerable<T> enumerable;
+
+            public CountingEnumerable(IEnumerable<T> enumerable)
+            {
+                this.enumerable = enumerable;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return this.GetEnumerator();
+            }
+
+            public long EnumerateCount { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                foreach (var item in this.enumerable)
+                {
+                    this.EnumerateCount++;
+                    yield return item;
+                }
+            }
+        }
+
+        private class CountingEnumerableCollection<T> : CountingEnumerable<T>, IReadOnlyCollection<T>
+        {
+            public int Count { get; private set; }
+
+            public CountingEnumerableCollection(IEnumerable<T> sequence, int count)
+                : base(sequence)
+            {
+                this.Count = count;
+            }
+
+            public CountingEnumerableCollection(IReadOnlyCollection<T> collection)
+               : this(collection, collection.Count)
+            {
+            }
+        }
+
         private static IEnumerable<T> Sequence<T>(params T[] items) { return items.Where(i => true); }
 
-        private static IEnumerable<T> ThrowsAt<T>(IEnumerable<T> items, int count)
+        private static IEnumerable<T> ThrowsAt<T>(IEnumerable<T> items, int index)
         {
-            var remaining = count;
+            var i = 0;
             foreach (var item in items)
             {
-                if (remaining == 0)
+                if (i == index)
                 {
                     Assert.False(true, "ThrowsAt failure!");
                 }
                 yield return item;
-                --remaining;
+                ++i;
             }
         }
     }
