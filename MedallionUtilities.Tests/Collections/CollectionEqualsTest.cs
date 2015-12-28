@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 using System.Collections;
+using System.Threading;
+using System.Diagnostics;
 
 namespace Medallion.Collections
 {
@@ -67,6 +69,13 @@ namespace Medallion.Collections
 
             new[] { 1, 1, 2, 2, 3, 3, }.CollectionEquals(Sequence(1, 2, 3, 1, 2, 3)).ShouldEqual(true);
             new[] { 1, 1, 2, 2, 3, 3, }.CollectionEquals(Sequence(1, 2, 1, 2, 3, 4)).ShouldEqual(false);
+        }
+
+        [Fact]
+        public void TestCustomComparer()
+        {
+            new[] { "a", "b" }.CollectionEquals(Sequence("B", "A"), StringComparer.OrdinalIgnoreCase)
+                .ShouldEqual(true);
         }
         
         [Fact]
@@ -139,8 +148,9 @@ namespace Medallion.Collections
             }
         }
 
+        #region ---- Comparsion Stuff ----
         [Fact]
-        public void ComparisonTest()
+        public void ComparisonTest2()
         {
             // large sequence-equal collections
             var a = Enumerable.Range(0, 1000);
@@ -177,6 +187,108 @@ namespace Medallion.Collections
             equalsCount = comparer.EqualsCount;
             hashCount = comparer.HashCount;
             return result;
+        }
+
+        [Fact]
+        public void ComparisonTest()
+        {
+            var results = new Dictionary<string, ComparisonResult>();
+
+            results.Add("sequence equal", ComparisonProfile(Enumerable.Range(0, 1000), Enumerable.Range(0, 1000).ToArray()));
+
+            results.Add("equal out of order", ComparisonProfile(Enumerable.Range(0, 1000), Enumerable.Range(0, 1000).OrderByDescending(i => i).ToArray()));
+
+            foreach (var kvp in results)
+            {
+                this.output.WriteLine($"---- {kvp.Key} ----");
+
+                this.output.WriteLine($"CollectionEquals: {kvp.Value.CollectionEqualsResult}");
+                this.output.WriteLine($"Dictionary: {kvp.Value.DictionaryMethodResult}");
+                this.output.WriteLine($"Sort: {kvp.Value.SortMethodResult}");
+
+                kvp.Value.CollectionEqualsResult.AssertBetterThan(kvp.Value.DictionaryMethodResult);
+                kvp.Value.CollectionEqualsResult.AssertBetterThan(kvp.Value.SortMethodResult);
+            }
+        }
+
+        private static ComparisonResult ComparisonProfile<T>(IEnumerable<T> a, IEnumerable<T> b)
+        {
+            return new ComparisonResult
+            {
+                CollectionEqualsResult = Profile(a, b, CollectionHelper.CollectionEquals),
+                DictionaryMethodResult = Profile(a, b, DictionaryBasedEquals),
+                SortMethodResult = Profile(a, b, SortBasedEquals),
+            };
+        }
+
+        private static ProfilingResult Profile<T>(
+            IEnumerable<T> a,
+            IEnumerable<T> b,
+            Func<IEnumerable<T>, IEnumerable<T>, IEqualityComparer<T>, bool> equals)
+        {
+            // capture base stats
+            var wrappedA = new CountingEnumerable<T>(a);
+            var wrappedB = b is IReadOnlyCollection<T> ? new CountingEnumerableCollection<T>((IReadOnlyCollection<T>)b) : new CountingEnumerable<T>(b);
+            var comparer = new CountingEqualityComparer<T>();
+            equals(wrappedA, wrappedB, comparer);
+
+            // capture timing stats
+            const int Trials = 100;
+            var originalThreadPriority = Thread.CurrentThread.Priority;
+            try
+            {
+                Thread.CurrentThread.Priority = ThreadPriority.Highest;
+
+                var stopwatch = Stopwatch.StartNew();
+                for (var i = 0; i < Trials; ++i)
+                {
+                    equals(a, b, EqualityComparer<T>.Default);
+                }
+
+                return new ProfilingResult
+                {
+                    Duration = stopwatch.Elapsed,
+                    EnumerateCount = wrappedA.EnumerateCount + wrappedB.EnumerateCount,
+                    EqualsCount = comparer.EqualsCount,
+                    HashCount = comparer.HashCount,
+                };
+            }
+            finally
+            {
+                Thread.CurrentThread.Priority = originalThreadPriority;
+            }
+        }
+
+        private class ComparisonResult
+        {
+            public ProfilingResult CollectionEqualsResult { get; set; }
+            public ProfilingResult DictionaryMethodResult { get; set; }
+            public ProfilingResult SortMethodResult { get; set; }
+        }
+
+        private class ProfilingResult
+        {
+            public TimeSpan Duration { get; set; }
+            public long EnumerateCount { get; set; }
+            public long EqualsCount { get; set; }
+            public long HashCount { get; set; }
+
+            public override string ToString() => $"Duration={this.Duration}, Enumerate={this.EnumerateCount}, Equals={this.EqualsCount}, Hash={this.HashCount}";
+
+            public void AssertBetterThan(ProfilingResult that)
+            {
+                var durationScore = (this.Duration - that.Duration).Duration() < TimeSpan.FromMilliseconds(this.Duration.TotalMilliseconds / 200) 
+                    ? 0
+                    : this.Duration.CompareTo(that.Duration);
+
+                var enumerateScore = this.EnumerateCount.CompareTo(that.EnumerateCount);
+                var equalsScore = this.EqualsCount.CompareTo(that.EqualsCount);
+                var hashScore = this.HashCount.CompareTo(that.HashCount);
+
+                var scores = new[] { durationScore, enumerateScore, equalsScore, hashScore };
+                Assert.True(scores.All(i => i <= 0), "Scores: " + string.Join(", ", scores));
+                Assert.True(scores.Any(i => i < 0), "Scores: " + string.Join(", ", scores));
+            }
         }
 
         private static bool SortBasedEquals<T>(IEnumerable<T> a, IEnumerable<T> b, IEqualityComparer<T> comparer)
@@ -280,6 +392,7 @@ namespace Medallion.Collections
             {
             }
         }
+        #endregion
 
         private static IEnumerable<T> Sequence<T>(params T[] items) { return items.Where(i => true); }
 

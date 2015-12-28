@@ -398,14 +398,14 @@ namespace Medallion.Collections
                     }
                     else
                     {
-                        elementCounts = TryBuildElementCountsWithKnownCount(thatEnumerator, remaining);
+                        elementCounts = TryBuildElementCountsWithKnownCount(thatEnumerator, remaining, cmp);
                     }
                 }
                 else if (TryFastCount(that, out thatCount))
                 {
                     probeSide = thatEnumerator;
                     var remaining = thatCount - itemsEnumerated;
-                    elementCounts = TryBuildElementCountsWithKnownCount(thisEnumerator, remaining);
+                    elementCounts = TryBuildElementCountsWithKnownCount(thisEnumerator, remaining, cmp);
                 }
                 else
                 {
@@ -440,7 +440,8 @@ namespace Medallion.Collections
 
         private static Dictionary<TKey, int> TryBuildElementCountsWithKnownCount<TKey>(
             IEnumerator<TKey> elements, 
-            int remaining)
+            int remaining,
+            IEqualityComparer<TKey> comparer)
         {
             if (remaining == 0)
             {
@@ -448,7 +449,7 @@ namespace Medallion.Collections
             }
 
             const int MaxInitialElementCountsCapacity = 1024;
-            var elementCounts = new Dictionary<TKey, int>(capacity: Math.Min(remaining, MaxInitialElementCountsCapacity))
+            var elementCounts = new Dictionary<TKey, int>(capacity: Math.Min(remaining, MaxInitialElementCountsCapacity), comparer: comparer)
             {
                 { elements.Current, 1 }
             };

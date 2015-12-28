@@ -111,5 +111,77 @@ namespace Medallion.Collections
             }
         }
         #endregion
+
+        #region ---- Sequence Comparer ----
+        public static Comparer<IEnumerable<T>> GetSequenceComparer<T>(IComparer<T> elementComparer = null)
+        {
+            return elementComparer == null || elementComparer == Comparer<T>.Default
+                ? SequenceComparer<T>.DefaultInstance
+                : new SequenceComparer<T>(elementComparer);
+        }
+
+        private sealed class SequenceComparer<T> : Comparer<IEnumerable<T>>
+        {
+            private static Comparer<IEnumerable<T>> defaultInstance;
+            public static Comparer<IEnumerable<T>> DefaultInstance
+            {
+                get { return defaultInstance ?? (defaultInstance = new SequenceComparer<T>(Comparer<T>.Default)); }
+            }
+
+            private readonly IComparer<T> elementComparer;
+
+            public SequenceComparer(IComparer<T> elementComparer)
+            {
+                this.elementComparer = elementComparer;
+            }
+
+            public override int Compare(IEnumerable<T> x, IEnumerable<T> y)
+            {
+                // from Comparer<T>.Compare(object, object)
+                if (x == null)
+                {
+                    return y == null ? 0 : -1;
+                }
+                if (y == null)
+                {
+                    return 1;
+                }
+               
+                if (ReferenceEquals(x, y))
+                {
+                    return 0;
+                }
+
+                using (var xEnumerator = x.GetEnumerator())
+                using (var yEnumerator = y.GetEnumerator())
+                {
+                    while (true)
+                    {
+                        var xHasMore = xEnumerator.MoveNext();
+                        var yHasMore = yEnumerator.MoveNext();
+                        
+                        if (!xHasMore)
+                        {
+                            return yHasMore ? -1 : 0;
+                        }
+                        if (!yHasMore)
+                        {
+                            return 1;
+                        }
+
+                        var cmp = this.elementComparer.Compare(xEnumerator.Current, yEnumerator.Current);
+                        if (cmp < 0)
+                        {
+                            return -1;
+                        }
+                        if (cmp > 0)
+                        {
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
+        #endregion
     }
 }
