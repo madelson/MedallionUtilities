@@ -150,49 +150,11 @@ namespace Medallion.Collections
 
         #region ---- Comparsion Stuff ----
         [Fact]
-        public void ComparisonTest2()
-        {
-            // large sequence-equal collections
-            var a = Enumerable.Range(0, 1000);
-            var b = a.ToArray();
-
-            long enumerateCount, equalsCount, hashCount,
-                dictEnumerateCount, dictEqualsCount, dictHashCount,
-                sortEnumerateCount, sortEqualsCount, sortHashCount;
-
-            ProfiledEquals(a, b, CollectionHelper.CollectionEquals<int>, out enumerateCount, out equalsCount, out hashCount).ShouldEqual(true);
-            ProfiledEquals(a, b, DictionaryBasedEquals<int>, out dictEnumerateCount, out dictEqualsCount, out dictHashCount);
-            ProfiledEquals(a, b, SortBasedEquals<int>, out sortEnumerateCount, out sortEqualsCount, out sortHashCount);
-            this.output.WriteLine($@"
-                ce: {enumerateCount}, {equalsCount}, {hashCount}
-                dict: {dictEnumerateCount}, {dictEqualsCount}, {dictHashCount}
-                sort: {sortEnumerateCount}, {sortEqualsCount}, {sortHashCount}"
-            );
-        }
-
-        private static bool ProfiledEquals<T>(
-            IEnumerable<T> a, 
-            IEnumerable<T> b,
-            Func<IEnumerable<T>, IEnumerable<T>, IEqualityComparer<T>, bool> equals,
-            out long enumerateCount,
-            out long equalsCount,
-            out long hashCount)
-        {
-            var wrappedA = new CountingEnumerable<T>(a);
-            var wrappedB = b is IReadOnlyCollection<T> ? new CountingEnumerableCollection<T>((IReadOnlyCollection<T>)b) : new CountingEnumerable<T>(b);
-            var comparer = new CountingEqualityComparer<T>();
-            var result = equals(wrappedA, wrappedB, comparer);
-
-            enumerateCount = wrappedA.EnumerateCount + wrappedB.EnumerateCount;
-            equalsCount = comparer.EqualsCount;
-            hashCount = comparer.HashCount;
-            return result;
-        }
-
-        [Fact]
         public void ComparisonTest()
         {
             var results = new Dictionary<string, ComparisonResult>();
+
+            results.Add("countable different lengths", ComparisonProfile(new int[1000], new int[1001]));
 
             results.Add("sequence equal", ComparisonProfile(Enumerable.Range(0, 1000), Enumerable.Range(0, 1000).ToArray()));
 
@@ -282,7 +244,8 @@ namespace Medallion.Collections
                     : this.Duration.CompareTo(that.Duration);
 
                 var enumerateScore = this.EnumerateCount.CompareTo(that.EnumerateCount);
-                var equalsScore = this.EqualsCount.CompareTo(that.EqualsCount);
+                // allow equals to vary by 1 because of the sequence equal optimization
+                var equalsScore = Math.Abs(this.EqualsCount - that.EqualsCount) > 1 ? this.EqualsCount.CompareTo(that.EqualsCount) : 0;
                 var hashScore = this.HashCount.CompareTo(that.HashCount);
 
                 var scores = new[] { durationScore, enumerateScore, equalsScore, hashScore };

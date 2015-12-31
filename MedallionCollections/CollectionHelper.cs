@@ -323,6 +323,8 @@ namespace Medallion.Collections
         // start with sequence compare
         // could revert to sequence compare when dictionary is balanced
         // could build dictionary inline & remove zeros
+
+        #region ---- CollectionEquals ----
         public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
         {
             Throw.IfNull(@this, "this");
@@ -379,7 +381,7 @@ namespace Medallion.Collections
                     }
                 }
 
-                Dictionary<TElement, int> elementCounts;
+                CountingSet<TElement> elementCounts;
                 IEnumerator<TElement> probeSide;
                 if (hasThisCount)
                 {
@@ -387,14 +389,12 @@ namespace Medallion.Collections
                     var remaining = thisCount - itemsEnumerated;
                     if (hasThatCount)
                     {
-                        elementCounts = new Dictionary<TElement, int>(capacity: remaining, comparer: cmp)
+                        elementCounts = new CountingSet<TElement>(capacity: remaining, comparer: cmp);
+                        do
                         {
-                            { thatEnumerator.Current, 1 }
-                        };
-                        while (thatEnumerator.MoveNext())
-                        {
-                            elementCounts.IncrementCount(thatEnumerator.Current);
+                            elementCounts.Increment(thatEnumerator.Current);
                         }
+                        while (thatEnumerator.MoveNext());
                     }
                     else
                     {
@@ -410,14 +410,12 @@ namespace Medallion.Collections
                 else
                 {
                     probeSide = thisEnumerator;
-                    elementCounts = new Dictionary<TElement, int>(cmp)
+                    elementCounts = new CountingSet<TElement>(cmp);
+                    do
                     {
-                        { thatEnumerator.Current, 1 }
-                    };
-                    while (thatEnumerator.MoveNext())
-                    {
-                        elementCounts.IncrementCount(thatEnumerator.Current);
+                        elementCounts.Increment(thatEnumerator.Current);
                     }
+                    while (thatEnumerator.MoveNext());
                 }
 
                 if (elementCounts == null)
@@ -427,18 +425,18 @@ namespace Medallion.Collections
 
                 do
                 {
-                    if (!elementCounts.TryDecrementCount(probeSide.Current))
+                    if (!elementCounts.TryDecrement(probeSide.Current))
                     {
                         return false;
                     }
                 }
                 while (probeSide.MoveNext());
 
-                return elementCounts.Count == 0;
+                return elementCounts.IsEmpty;
             }
         }
 
-        private static Dictionary<TKey, int> TryBuildElementCountsWithKnownCount<TKey>(
+        private static CountingSet<TKey> TryBuildElementCountsWithKnownCount<TKey>(
             IEnumerator<TKey> elements, 
             int remaining,
             IEqualityComparer<TKey> comparer)
@@ -449,17 +447,15 @@ namespace Medallion.Collections
             }
 
             const int MaxInitialElementCountsCapacity = 1024;
-            var elementCounts = new Dictionary<TKey, int>(capacity: Math.Min(remaining, MaxInitialElementCountsCapacity), comparer: comparer)
-            {
-                { elements.Current, 1 }
-            };
+            var elementCounts = new CountingSet<TKey>(capacity: Math.Min(remaining, MaxInitialElementCountsCapacity), comparer: comparer);
+            elementCounts.Increment(elements.Current);
             while (elements.MoveNext())
             {
                 if (--remaining < 0)
                 {
                     return null;
                 }
-                elementCounts.IncrementCount(elements.Current);
+                elementCounts.Increment(elements.Current);
             }
 
             if (remaining > 0)
@@ -470,38 +466,152 @@ namespace Medallion.Collections
             return elementCounts;
         }
 
-        private static void IncrementCount<TKey>(this Dictionary<TKey, int> elementCounts, TKey key)
+        private sealed class CountingSet<T>
         {
-            int existingCount;
-            if (elementCounts.TryGetValue(key, out existingCount))
-            {
-                elementCounts[key] = existingCount + 1;
-            }
-            else
-            {
-                elementCounts.Add(key, 1);
-            }
-        }
+            private const double MaxLoad = .75;
 
-        private static bool TryDecrementCount<TKey>(this Dictionary<TKey, int> elementCounts, TKey key)
-        {
-            int existingCount;
-            if (!elementCounts.TryGetValue(key, out existingCount))
+            private readonly IEqualityComparer<T> comparer;
+            private Bucket[] buckets;
+            private int populatedBucketCount;
+            private int nextResizeCount;            
+
+            public CountingSet(IEqualityComparer<T> comparer, int capacity = 0)
             {
+                this.comparer = comparer;
+                this.buckets = new Bucket[(int)(Math.Max(capacity, 16) / MaxLoad)];
+                this.nextResizeCount = this.CalculateNextResizeCount();
+            }
+
+            public bool IsEmpty { get { return this.populatedBucketCount == 0; } }
+
+            public void Increment(T item)
+            {
+                int bucketIndex;
+                uint hashCode;
+                if (this.TryFindBucket(item, out bucketIndex, out hashCode))
+                {
+                    ++this.buckets[bucketIndex].Count;
+                }
+                else
+                {
+                    this.buckets[bucketIndex].HashCode = hashCode;
+                    this.buckets[bucketIndex].Value = item;
+                    this.buckets[bucketIndex].Count = 1;
+                    ++this.populatedBucketCount;
+
+                    if (this.populatedBucketCount == this.nextResizeCount)
+                    {
+                        var newBuckets = new Bucket[this.GetNextTableSize()];
+
+                        // rehash
+                        for (var i = 0; i < this.buckets.Length; ++i)
+                        {
+                            var oldBucket = this.buckets[i];
+                            if (oldBucket.HashCode != 0)
+                            {
+                                var newBucketIndex = oldBucket.HashCode % newBuckets.Length;
+                                while (true)
+                                {
+                                    if (newBuckets[newBucketIndex].HashCode == 0)
+                                    {
+                                        newBuckets[newBucketIndex] = oldBucket;
+                                        break;
+                                    }
+
+                                    newBucketIndex = (newBucketIndex + 1) % newBuckets.Length;
+                                }
+                            } 
+                        }
+
+                        this.buckets = newBuckets;
+                        this.nextResizeCount = this.CalculateNextResizeCount();
+                    }
+                }
+            }
+
+            public bool TryDecrement(T item)
+            {
+                int bucketIndex;
+                uint ignored;
+                if (this.TryFindBucket(item, out bucketIndex, out ignored)
+                    && this.buckets[bucketIndex].Count > 0)
+                {
+                    if (--this.buckets[bucketIndex].Count == 0)
+                    {
+                        // Note: we can't do this because it messes up our try-find logic
+                        //// mark as unpopulated. Not strictly necessary because CollectionEquals always does all increments
+                        //// before all decrements currently. However, this is very cheap to do and allowing the collection to
+                        //// "just work" in any situation is a nice benefit
+                        //// this.buckets[bucketIndex].HashCode = 0;
+
+                        --this.populatedBucketCount;
+                    }
+                    return true;
+                }
+
                 return false;
             }
 
-            if (existingCount == 1)
+            private bool TryFindBucket(T item, out int index, out uint hashCode)
             {
-                elementCounts.Remove(key);
+                var rawHashCode = this.comparer.GetHashCode(item);
+                hashCode = rawHashCode == 0 ? uint.MaxValue : unchecked((uint)rawHashCode);
+
+                var bestBucketIndex = (int)(hashCode % this.buckets.Length);
+
+                var bucketIndex = bestBucketIndex;
+                while (true) // guaranteed to terminate because of how we set load factor
+                {
+                    var bucket = this.buckets[bucketIndex];
+                    if (bucket.HashCode == 0)
+                    {
+                        // found unoccupied bucket
+                        index = bucketIndex;
+                        return false;
+                    }
+                    if (bucket.HashCode == hashCode && this.comparer.Equals(bucket.Value, item))
+                    {
+                        // found matching bucket
+                        index = bucketIndex;
+                        return true;
+                    }
+
+                    // otherwise march on to the next adjacent bucket
+                    bucketIndex = (bucketIndex + 1) % this.buckets.Length;
+                }
             }
-            else
+
+            private int CalculateNextResizeCount()
             {
-                elementCounts[key] = existingCount - 1;
+                return (int)(MaxLoad * this.buckets.Length) + 1;
             }
-            
-            return true;
+
+            private int GetNextTableSize()
+            {
+                var nextSize = unchecked((2 * (this.buckets.Length + 1)) + 1);
+                if (nextSize <= this.buckets.Length)
+                {
+                    // some kind of overflow occurred
+                    var remainingLength = int.MaxValue - this.buckets.Length;
+                    if (remainingLength == 0)
+                    {
+                        throw new InvalidOperationException("Hash table cannot be further expanded");
+                    }
+
+                    return this.buckets.Length + Math.Min(remainingLength / 2, 1);
+                }
+
+                return nextSize;
+            }
+
+            private struct Bucket
+            {
+                internal uint HashCode;
+                internal T Value;
+                internal int Count;
+            }
         }
+        #endregion
 
         private static bool TryFastCount<T>(IEnumerable<T> @this, out int count)
         {
