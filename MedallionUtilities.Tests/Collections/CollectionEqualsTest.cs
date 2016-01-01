@@ -154,22 +154,36 @@ namespace Medallion.Collections
         {
             var results = new Dictionary<string, ComparisonResult>();
 
-            results.Add("countable different lengths", ComparisonProfile(new int[1000], new int[1001]));
+            results.Add("arrays of different lengths", ComparisonProfile(Enumerable.Range(0, 1000).ToArray(), Enumerable.Range(0, 1001).ToArray()));
 
-            results.Add("sequence equal", ComparisonProfile(Enumerable.Range(0, 1000), Enumerable.Range(0, 1000).ToArray()));
+            results.Add("long array short lazy", ComparisonProfile(Enumerable.Range(0, 1000).Reverse().ToArray(), Enumerable.Range(0, 500)));
+
+            results.Add("short array long lazy", ComparisonProfile(Enumerable.Range(0, 1000).Reverse(), Enumerable.Range(0, 500).ToArray()));
+
+            results.Add("sequence equal", ComparisonProfile(Enumerable.Range(0, 1000), Enumerable.Range(0, 1000)));
+
+            results.Add("mostly sequence equal", ComparisonProfile(Enumerable.Range(0, 1000).Append(int.MaxValue), Enumerable.Range(0, 1000).Append(int.MaxValue)));
 
             results.Add("equal out of order", ComparisonProfile(Enumerable.Range(0, 1000), Enumerable.Range(0, 1000).OrderByDescending(i => i).ToArray()));
+
+            var strings = Enumerable.Range(0, 1000).Select(i => (i + (long)int.MaxValue).ToString("0000000000000000000"))
+                .ToArray();
+            results.Add("strings equal out of order", ComparisonProfile(strings, strings.Reverse()));
 
             foreach (var kvp in results)
             {
                 this.output.WriteLine($"---- {kvp.Key} ----");
 
+                var cer = kvp.Value.CollectionEqualsResult;
+                var dmr = kvp.Value.DictionaryMethodResult;
+                Func<double, double, string> perc = (n, d) => (n / d).ToString("0.0%");
+                this.output.WriteLine($"{perc(cer.Duration.Ticks, dmr.Duration.Ticks)}, {perc(cer.EnumerateCount, dmr.EnumerateCount)} {perc(cer.EqualsCount, dmr.EqualsCount)}, {perc(cer.HashCount, dmr.HashCount)}");
                 this.output.WriteLine($"CollectionEquals: {kvp.Value.CollectionEqualsResult}");
                 this.output.WriteLine($"Dictionary: {kvp.Value.DictionaryMethodResult}");
-                this.output.WriteLine($"Sort: {kvp.Value.SortMethodResult}");
+                //this.output.WriteLine($"Sort: {kvp.Value.SortMethodResult}");
 
                 kvp.Value.CollectionEqualsResult.AssertBetterThan(kvp.Value.DictionaryMethodResult);
-                kvp.Value.CollectionEqualsResult.AssertBetterThan(kvp.Value.SortMethodResult);
+                //kvp.Value.CollectionEqualsResult.AssertBetterThan(kvp.Value.SortMethodResult);
             }
         }
 
@@ -179,7 +193,7 @@ namespace Medallion.Collections
             {
                 CollectionEqualsResult = Profile(a, b, CollectionHelper.CollectionEquals),
                 DictionaryMethodResult = Profile(a, b, DictionaryBasedEquals),
-                SortMethodResult = Profile(a, b, SortBasedEquals),
+                //SortMethodResult = Profile(a, b, SortBasedEquals),
             };
         }
 
@@ -189,7 +203,7 @@ namespace Medallion.Collections
             Func<IEnumerable<T>, IEnumerable<T>, IEqualityComparer<T>, bool> equals)
         {
             // capture base stats
-            var wrappedA = new CountingEnumerable<T>(a);
+            var wrappedA = a is IReadOnlyCollection<T> ? new CountingEnumerableCollection<T>((IReadOnlyCollection<T>)a) : new CountingEnumerable<T>(a);
             var wrappedB = b is IReadOnlyCollection<T> ? new CountingEnumerableCollection<T>((IReadOnlyCollection<T>)b) : new CountingEnumerable<T>(b);
             var comparer = new CountingEqualityComparer<T>();
             equals(wrappedA, wrappedB, comparer);

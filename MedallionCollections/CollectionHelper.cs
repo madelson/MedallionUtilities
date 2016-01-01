@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -325,11 +326,19 @@ namespace Medallion.Collections
         // could build dictionary inline & remove zeros
 
         #region ---- CollectionEquals ----
+        /// <summary>
+        /// Determines whether <paramref name="this"/> and <paramref name="that"/> are equal in the sense of having the exact same
+        /// elements. Unlike <see cref="Enumerable.SequenceEqual{TSource}(IEnumerable{TSource}, IEnumerable{TSource})"/>,
+        /// this method disregards order. Unlike <see cref="ISet{T}.SetEquals(IEnumerable{T})"/>, this method does not disregard duplicates.
+        /// An optional <paramref name="comparer"/> allows the equality semantics for the elements to be specified
+        /// </summary>
         public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
         {
             Throw.IfNull(@this, "this");
             Throw.IfNull(that, "that");
 
+            // FastCount optimization: If both of the collections are materialized and have counts, 
+            // we can exit very quickly if those counts differ
             int thisCount, thatCount;
             var hasThisCount = TryFastCount(@this, out thisCount);
             bool hasThatCount;
@@ -356,6 +365,9 @@ namespace Medallion.Collections
             var cmp = comparer ?? EqualityComparer<TElement>.Default;
 
             var itemsEnumerated = 0;
+            // SequenceEqual optimization: we reduce/avoid hashing
+            // the collections have common prefixes, at the cost of only one
+            // extra Equals() call in the case where the prefixes are not common
             using (var thisEnumerator = @this.GetEnumerator())
             using (var thatEnumerator = that.GetEnumerator())
             {
@@ -366,29 +378,43 @@ namespace Medallion.Collections
 
                     if (thisFinished)
                     {
+                        // either this shorter than that, or the two were sequence-equal
                         return thatFinished;
                     }
                     if (thatFinished)
                     {
+                        // that shorter than this
                         return false;
                     }
 
+                    // keep track of this so that we can factor it into count-based 
+                    // logic below
                     ++itemsEnumerated;
 
                     if (!cmp.Equals(thisEnumerator.Current, thatEnumerator.Current))
                     {
-                        break;
+                        break; // prefixes were not equal
                     }
                 }
 
+                // now, build a dictionary of item => count out of one collection and then
+                // probe it with the other collection to look for mismatches
+
+                // Build/Probe Choice optimization: if we know the count of one collection, we should
+                // use the other collection to build the dictionary. That way we can bail immediately if
+                // we see too few or too many items
                 CountingSet<TElement> elementCounts;
                 IEnumerator<TElement> probeSide;
                 if (hasThisCount)
                 {
+                    // we know this's count => use that as the build side
                     probeSide = thisEnumerator;
                     var remaining = thisCount - itemsEnumerated;
                     if (hasThatCount)
                     {
+                        // if we have both counts, that means they must be equal or we would have already
+                        // exited. However, in this case, we know exactly the capacity needed for the dictionary
+                        // so we can avoid resizing
                         elementCounts = new CountingSet<TElement>(capacity: remaining, comparer: cmp);
                         do
                         {
@@ -403,12 +429,14 @@ namespace Medallion.Collections
                 }
                 else if (TryFastCount(that, out thatCount))
                 {
+                    // we know that's count => use this as the build side
                     probeSide = thatEnumerator;
                     var remaining = thatCount - itemsEnumerated;
                     elementCounts = TryBuildElementCountsWithKnownCount(thisEnumerator, remaining, cmp);
                 }
                 else
                 {
+                    // when we don't know either count, just use that as the build side arbitrarily
                     probeSide = thisEnumerator;
                     elementCounts = new CountingSet<TElement>(cmp);
                     do
@@ -418,24 +446,33 @@ namespace Medallion.Collections
                     while (thatEnumerator.MoveNext());
                 }
 
+                // check whether we failed to construct a dictionary. This happens when we know
+                // one of the counts and we detect, during construction, that the counts are unequal
                 if (elementCounts == null)
                 {
                     return false;
                 }
-
+                
+                // probe the dictionary with the probe side enumerator
                 do
                 {
                     if (!elementCounts.TryDecrement(probeSide.Current))
                     {
+                        // element in probe not in build => not equal
                         return false;
                     }
                 }
                 while (probeSide.MoveNext());
 
+                // we are equal only if the loop above completely cleared out the dictionary
                 return elementCounts.IsEmpty;
             }
         }
 
+        /// <summary>
+        /// Constructs a count dictionary, staying mindful of the known number of elements
+        /// so that we bail early (returning null) if we detect a count mismatch
+        /// </summary>
         private static CountingSet<TKey> TryBuildElementCountsWithKnownCount<TKey>(
             IEnumerator<TKey> elements, 
             int remaining,
@@ -443,6 +480,7 @@ namespace Medallion.Collections
         {
             if (remaining == 0)
             {
+                // don't build the dictionary at all if nothing should be in it
                 return null;
             }
 
@@ -453,6 +491,7 @@ namespace Medallion.Collections
             {
                 if (--remaining < 0)
                 {
+                    // too many elements
                     return null;
                 }
                 elementCounts.Increment(elements.Current);
@@ -460,25 +499,37 @@ namespace Medallion.Collections
 
             if (remaining > 0)
             {
+                // too few elements
                 return null;
             }
 
             return elementCounts;
         }
-
+        
+        /// <summary>
+        /// Key Lookup Reduction optimization: this custom datastructure halves the number of <see cref="IEqualityComparer{T}.GetHashCode(T)"/>
+        /// and <see cref="IEqualityComparer{T}.Equals(T, T)"/> operations by building in the increment/decrement operations of a counting dictionary.
+        /// This also solves <see cref="Dictionary{TKey, TValue}"/>'s issues with null keys
+        /// </summary>
         private sealed class CountingSet<T>
         {
-            private const double MaxLoad = .75;
+            // picked based on observing unit test performance
+            private const double MaxLoad = .62;
 
             private readonly IEqualityComparer<T> comparer;
             private Bucket[] buckets;
             private int populatedBucketCount;
+            /// <summary>
+            /// When we reach this count, we need to resize
+            /// </summary>
             private int nextResizeCount;            
 
             public CountingSet(IEqualityComparer<T> comparer, int capacity = 0)
             {
                 this.comparer = comparer;
-                this.buckets = new Bucket[(int)(Math.Max(capacity, 16) / MaxLoad)];
+                // we pick the initial length by assuming our current table is one short of the desired
+                // capacity and then using our standard logic of picking the next valid table size
+                this.buckets = new Bucket[GetNextTableSize((int)(capacity / MaxLoad) - 1)];
                 this.nextResizeCount = this.CalculateNextResizeCount();
             }
 
@@ -490,18 +541,21 @@ namespace Medallion.Collections
                 uint hashCode;
                 if (this.TryFindBucket(item, out bucketIndex, out hashCode))
                 {
+                    // if a bucket already existed, just update it's count
                     ++this.buckets[bucketIndex].Count;
                 }
                 else
                 {
+                    // otherwise, claim a new bucket
                     this.buckets[bucketIndex].HashCode = hashCode;
                     this.buckets[bucketIndex].Value = item;
                     this.buckets[bucketIndex].Count = 1;
                     ++this.populatedBucketCount;
 
+                    // resize the table if we've grown too full
                     if (this.populatedBucketCount == this.nextResizeCount)
                     {
-                        var newBuckets = new Bucket[this.GetNextTableSize()];
+                        var newBuckets = new Bucket[GetNextTableSize(this.buckets.Length)];
 
                         // rehash
                         for (var i = 0; i < this.buckets.Length; ++i)
@@ -554,6 +608,8 @@ namespace Medallion.Collections
 
             private bool TryFindBucket(T item, out int index, out uint hashCode)
             {
+                // we convert the raw hash code to a uint to get correctly-signed mod operations
+                // and get rid of the zero value so that we can use 0 to mean "unoccupied"
                 var rawHashCode = this.comparer.GetHashCode(item);
                 hashCode = rawHashCode == 0 ? uint.MaxValue : unchecked((uint)rawHashCode);
 
@@ -586,26 +642,33 @@ namespace Medallion.Collections
                 return (int)(MaxLoad * this.buckets.Length) + 1;
             }
 
-            private int GetNextTableSize()
+            private static readonly int[] HashTableSizes = new[]
             {
-                var nextSize = unchecked((2 * (this.buckets.Length + 1)) + 1);
-                if (nextSize <= this.buckets.Length)
-                {
-                    // some kind of overflow occurred
-                    var remainingLength = int.MaxValue - this.buckets.Length;
-                    if (remainingLength == 0)
-                    {
-                        throw new InvalidOperationException("Hash table cannot be further expanded");
-                    }
+                // hash table primes from http://planetmath.org/goodhashtableprimes
+                23, 53, 97, 193, 389, 769, 1543, 3079, 6151, 12289,
+                24593, 49157, 98317, 196613, 393241, 786433, 1572869,
+                3145739, 6291469, 12582917, 25165843, 50331653, 100663319,
+                201326611, 402653189, 805306457, 1610612741,
+                // the first two values are (1) a prime roughly half way between the previous value and int.MaxValue
+                // and (2) the prime closest too, but not above, int.MaxValue. The maximum size is, of course, int.MaxValue
+                1879048201, 2147483629, int.MaxValue
+            };
 
-                    return this.buckets.Length + Math.Min(remainingLength / 2, 1);
+            private static int GetNextTableSize(int currentSize)
+            {
+                for (var i = 0; i < HashTableSizes.Length; ++i)
+                {
+                    var nextSize = HashTableSizes[i];
+                    if (nextSize > currentSize) { return nextSize; }
                 }
 
-                return nextSize;
+                throw new InvalidOperationException("Hash table cannot expand further");
             }
 
+            [DebuggerDisplay("{Value}, {Count}, {HashCode}")]
             private struct Bucket
             {
+                // note: 0 (default) means the bucket is unoccupied
                 internal uint HashCode;
                 internal T Value;
                 internal int Count;
@@ -628,8 +691,6 @@ namespace Medallion.Collections
                 count = readOnlyCollection.Count;
                 return true;
             }
-
-            // TODO should we test for ICollection here?
 
             count = -1;
             return false;
