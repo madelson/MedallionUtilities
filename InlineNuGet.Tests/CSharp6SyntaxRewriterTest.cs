@@ -32,6 +32,8 @@ namespace Medallion.Tools.InlineNuGet.Tests
                         public void Z() => this.Y();
 
                         public int Val() => 2;
+
+                        public int Q => 100;
                     }
                 }"
             );

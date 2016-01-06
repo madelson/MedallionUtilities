@@ -119,5 +119,30 @@ namespace Medallion.Tools
 
             return this.Visit(resultWithTrivia);
         }
+
+        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            PropertyDeclarationSyntax updated;
+            if (node.ExpressionBody != null)
+            {
+                var block = SyntaxFactory.Block(
+                    SyntaxFactory.ReturnStatement(node.ExpressionBody.Expression)
+                );
+
+                updated = node.WithExpressionBody(null)
+                    .WithSemicolonToken(default(SyntaxToken))
+                    .WithAccessorList(
+                        SyntaxFactory.AccessorList(
+                            SyntaxFactory.List(new[] { SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration, block) })
+                        )
+                    );
+            }
+            else
+            {
+                updated = node;
+            }
+
+            return base.VisitPropertyDeclaration(updated);
+        }
     }
 }
