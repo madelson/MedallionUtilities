@@ -10,8 +10,8 @@ namespace Medallion.Collections
 {
     public static class Empty<TKey, TValue>
     {
-        public static IReadOnlyDictionary<TKey, TValue> Dictionary { get { return EmptyDictionary.Instance; } }
-        public static IDictionary<TKey, TValue> FrozenDictionary { get { return EmptyDictionary.Instance; } }
+        public static IReadOnlyDictionary<TKey, TValue> Dictionary => EmptyDictionary.Instance;
+        public static IDictionary<TKey, TValue> FrozenDictionary => EmptyDictionary.Instance;
 
         private sealed class EmptyDictionary : IReadOnlyDictionary<TKey, TValue>, IDictionary<TKey, TValue>, IDictionary, IDictionaryEnumerator
         {
@@ -36,33 +36,33 @@ namespace Medallion.Collections
                 get { throw new KeyNotFoundException(); }
             }
 
-            int ICollection.Count { get { return 0; } }
+            int ICollection.Count => 0;
 
-            int ICollection<KeyValuePair<TKey, TValue>>.Count { get { return 0; } }
+            int ICollection<KeyValuePair<TKey, TValue>>.Count => 0;
 
-            int IReadOnlyCollection<KeyValuePair<TKey, TValue>>.Count { get { return 0; } }
+            int IReadOnlyCollection<KeyValuePair<TKey, TValue>>.Count => 0;
 
-            bool IDictionary.IsFixedSize { get { return true; } }
+            bool IDictionary.IsFixedSize => true;
 
-            bool IDictionary.IsReadOnly { get { return true; } }
+            bool IDictionary.IsReadOnly => true;
 
-            bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly { get { return true; } }
+            bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly => true;
 
-            bool ICollection.IsSynchronized { get { return false; } }
+            bool ICollection.IsSynchronized => false;
 
-            ICollection IDictionary.Keys { get { return Empty.Collection; } }
+            ICollection IDictionary.Keys => Empty.Collection;
 
-            ICollection<TKey> IDictionary<TKey, TValue>.Keys { get { return Empty<TKey>.FrozenCollection; } }
+            ICollection<TKey> IDictionary<TKey, TValue>.Keys => Empty<TKey>.FrozenCollection;
 
-            IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys { get { return Empty<TKey>.Collection; } }
+            IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys => Empty<TKey>.Collection;
 
-            object ICollection.SyncRoot { get { return this; } }
+            object ICollection.SyncRoot => this;
 
-            ICollection<TValue> IDictionary<TKey, TValue>.Values { get { return Empty<TValue>.FrozenCollection; } }
+            ICollection<TValue> IDictionary<TKey, TValue>.Values => Empty<TValue>.FrozenCollection;
 
-            ICollection IDictionary.Values { get { return Empty.Collection; } }
+            ICollection IDictionary.Values => Empty.Collection;
 
-            IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values { get { return Empty<TValue>.Collection; } }
+            IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => Empty<TValue>.Collection;
 
             object IDictionaryEnumerator.Key
             {
@@ -109,50 +109,25 @@ namespace Medallion.Collections
                 throw ThrowReadOnly();
             }
 
-            bool IDictionary.Contains(object key)
-            {
-                return false;
-            }
+            bool IDictionary.Contains(object key) => false;
 
-            bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item)
-            {
-                return false;
-            }
+            bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item) => false;
 
-            bool IDictionary<TKey, TValue>.ContainsKey(TKey key)
-            {
-                return false;
-            }
+            bool IDictionary<TKey, TValue>.ContainsKey(TKey key) => false;
 
-            bool IReadOnlyDictionary<TKey, TValue>.ContainsKey(TKey key)
-            {
-                return false;
-            }
+            bool IReadOnlyDictionary<TKey, TValue>.ContainsKey(TKey key) => false;
 
-            void ICollection.CopyTo(Array array, int index)
-            {
-                Empty.Collection.CopyTo(array, index);
-            }
+            void ICollection.CopyTo(Array array, int index) => Empty.Collection.CopyTo(array, index);
 
-            void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
-            {
-                Empty<KeyValuePair<TKey, TValue>>.FrozenCollection.CopyTo(array, arrayIndex);
-            }
+            void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) 
+                => Empty<KeyValuePair<TKey, TValue>>.FrozenCollection.CopyTo(array, arrayIndex);
 
-            IDictionaryEnumerator IDictionary.GetEnumerator()
-            {
-                return this;
-            }
+            IDictionaryEnumerator IDictionary.GetEnumerator() => this;
 
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return this;
-            }
+            IEnumerator IEnumerable.GetEnumerator() => this;
 
             IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
-            {
-                return Empty<KeyValuePair<TKey, TValue>>.Collection.GetEnumerator();
-            }
+                => Empty<KeyValuePair<TKey, TValue>>.Collection.GetEnumerator();
 
             void IDictionary.Remove(object key)
             {
@@ -181,7 +156,7 @@ namespace Medallion.Collections
                 return false;
             }
 
-            bool IEnumerator.MoveNext() { return false; }
+            bool IEnumerator.MoveNext() => false;
 
             void IEnumerator.Reset() { }
 

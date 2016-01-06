@@ -9,9 +9,9 @@ namespace Medallion.Collections
 {
     public static class Empty
     {
-        public static IEnumerable Enumerable { get { return Empty<object>.Enumerable; } }
-        public static ICollection Collection { get { return List; } }
-        public static IList List { get { return (IList)Empty<object>.List; } }
-        public static IDictionary Dictionary { get { return (IDictionary)Empty<string, object>.Dictionary; } }
+        public static IEnumerable Enumerable => Empty<object>.Enumerable;
+        public static ICollection Collection => List;
+        public static IList List => (IList)Empty<object>.List;
+        public static IDictionary Dictionary => (IDictionary)Empty<string, object>.Dictionary;
     }
 }

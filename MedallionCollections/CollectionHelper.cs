@@ -58,7 +58,10 @@ namespace Medallion.Collections
 
         public static IEnumerable<TElement> Prepend<TElement>(this IEnumerable<TElement> second, IEnumerable<TElement> first)
         {
-            return first.Append(second);
+            Throw.IfNull(first, nameof(first));
+            Throw.IfNull(second, nameof(second));
+
+            return new AppendEnumerable<TElement>(first, second);
         }
 
         public static IEnumerable<TElement> Prepend<TElement>(this IEnumerable<TElement> sequence, TElement previous)

@@ -12,17 +12,14 @@ namespace Medallion.Collections
     {
         private static TElement[] array;
 
-        public static TElement[] Array
-        {
-            get { return array ?? (array = new TElement[0]); }
-        }
+        public static TElement[] Array => array ?? (array = new TElement[0]);
 
-        public static IEnumerable<TElement> Enumerable { get { return EmptyCollection.Instance; } }
-        public static IReadOnlyCollection<TElement> Collection { get { return EmptyCollection.Instance; } }
-        public static IReadOnlyList<TElement> List { get { return EmptyCollection.Instance; } }
-        public static ISet<TElement> Set { get { return EmptyCollection.Instance; } }
-        public static ICollection<TElement> FrozenCollection { get { return EmptyCollection.Instance; } }
-        public static IList<TElement> FrozenList { get { return EmptyCollection.Instance; } }
+        public static IEnumerable<TElement> Enumerable => EmptyCollection.Instance;
+        public static IReadOnlyCollection<TElement> Collection => EmptyCollection.Instance;
+        public static IReadOnlyList<TElement> List => EmptyCollection.Instance;
+        public static ISet<TElement> Set => EmptyCollection.Instance;
+        public static ICollection<TElement> FrozenCollection => EmptyCollection.Instance;
+        public static IList<TElement> FrozenList => EmptyCollection.Instance;
 
         private sealed class EmptyCollection : IList<TElement>, IReadOnlyList<TElement>, ISet<TElement>, IEnumerator<TElement>, IList
         {
@@ -47,11 +44,11 @@ namespace Medallion.Collections
                 set { throw ThrowReadOnly(); }
             }
 
-            int IReadOnlyCollection<TElement>.Count { get { return 0; } }
+            int IReadOnlyCollection<TElement>.Count => 0;
 
-            int ICollection.Count { get { return 0; } }
+            int ICollection.Count => 0;
 
-            int ICollection<TElement>.Count { get { return 0; } }
+            int ICollection<TElement>.Count => 0;
 
             object IEnumerator.Current
             {
@@ -59,21 +56,18 @@ namespace Medallion.Collections
                 get { throw new InvalidOperationException("Enumeration has either not started or has already finished"); }
             }
 
-            TElement IEnumerator<TElement>.Current
-            {
-                // based on new List<int>().GetEnumerator().Current
-                get { return default(TElement); }
-            }
+            // based on new List<int>().GetEnumerator().Current
+            TElement IEnumerator<TElement>.Current => default(TElement);
 
-            bool IList.IsFixedSize { get { return true; } }
+            bool IList.IsFixedSize => true;
 
-            bool IList.IsReadOnly { get { return true; } }
+            bool IList.IsReadOnly => true;
 
-            bool ICollection<TElement>.IsReadOnly { get { return true; } }
+            bool ICollection<TElement>.IsReadOnly => true;
 
-            bool ICollection.IsSynchronized { get { return false; } }
+            bool ICollection.IsSynchronized => false;
 
-            object ICollection.SyncRoot { get { return this; } }
+            object ICollection.SyncRoot => this;
 
             int IList.Add(object value)
             {
@@ -100,15 +94,9 @@ namespace Medallion.Collections
                 throw ThrowReadOnly();
             }
 
-            bool IList.Contains(object value)
-            {
-                return false;
-            }
+            bool IList.Contains(object value) => false;
 
-            bool ICollection<TElement>.Contains(TElement item)
-            {
-                return false;
-            }
+            bool ICollection<TElement>.Contains(TElement item) => false;
 
             void ICollection.CopyTo(Array array, int index)
             {
@@ -141,15 +129,9 @@ namespace Medallion.Collections
                 return this;
             }
 
-            int IList.IndexOf(object value)
-            {
-                return -1;
-            }
+            int IList.IndexOf(object value) => -1;
 
-            int IList<TElement>.IndexOf(TElement item)
-            {
-                return -1;
-            }
+            int IList<TElement>.IndexOf(TElement item) => -1;
 
             void IList.Insert(int index, object value)
             {
@@ -190,13 +172,11 @@ namespace Medallion.Collections
                 return !other.Any();
             }
 
-            bool IEnumerator.MoveNext()
-            {
-                return false;
-            }
+            bool IEnumerator.MoveNext() => false;
 
             bool ISet<TElement>.Overlaps(IEnumerable<TElement> other)
             {
+                Throw.IfNull(other, nameof(other));
                 return false;
             }
 
