@@ -39,13 +39,15 @@ namespace Medallion.Tools
         private string Create()
         {
             var cSharpFiles = this.project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular)
-                .Where(d => d.Name != "AssemblyInfo.cs");
+                .Where(d => d.Name != "AssemblyInfo.cs")
+                // eliminate the weird auto-generated assembly attributes file
+                .Where(d => d.FilePath.StartsWith(Path.GetDirectoryName(this.project.FilePath), StringComparison.OrdinalIgnoreCase));
             var syntaxRoots = cSharpFiles.Select(this.RewriteDocumentSyntax)
                 .Cast<CompilationUnitSyntax>()
                 .ToArray();
             var merged = DocumentMerger.Merge(syntaxRoots);
 
-            var codeFile = Path.Combine(this.tempWorkspace.FullName, Path.GetFileNameWithoutExtension(this.project.FilePath) + ".pp");
+            var codeFile = Path.Combine(this.tempWorkspace.FullName, Path.GetFileNameWithoutExtension(this.project.FilePath) + ".cs.pp");
             using (var writer = new StreamWriter(codeFile))
             {
                 merged.WriteTo(writer);

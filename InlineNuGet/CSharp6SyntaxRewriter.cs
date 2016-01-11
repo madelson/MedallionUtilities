@@ -25,6 +25,8 @@ namespace Medallion.Tools
 
         public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         {
+            node = (InvocationExpressionSyntax)base.VisitInvocationExpression(node);
+
             var firstToken = node.GetFirstToken();
             if (firstToken.Span.Length == NameOf.Length && firstToken.ToString() == NameOf)
             {
@@ -35,12 +37,13 @@ namespace Medallion.Tools
                 }
             }
 
-            return base.VisitInvocationExpression(node);
+            return node;
         }
         
         public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
-            MethodDeclarationSyntax updated;
+            node = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node);
+
             if (node.ExpressionBody != null)
             {
                 var needsReturn = this.model.GetTypeInfo(node.ExpressionBody.Expression).Type.SpecialType != SpecialType.System_Void;
@@ -50,18 +53,16 @@ namespace Medallion.Tools
                         : (StatementSyntax)SyntaxFactory.ExpressionStatement(node.ExpressionBody.Expression)
                 );
 
-                updated = node.WithExpressionBody(null).WithSemicolonToken(default(SyntaxToken)).WithBody(block).NormalizeWhitespace();
-            }
-            else
-            {
-                updated = node;
+                return node.WithExpressionBody(null).WithSemicolonToken(default(SyntaxToken)).WithBody(block).NormalizeWhitespace();
             }
 
-            return base.VisitMethodDeclaration(updated);
+            return node;
         }
 
         public override SyntaxNode VisitInterpolatedStringExpression(InterpolatedStringExpressionSyntax node)
         {
+            node = (InterpolatedStringExpressionSyntax)base.VisitInterpolatedStringExpression(node);
+
             var expressions = new List<ExpressionSyntax>();
             var formatStringBuilder = new StringBuilder();
 
@@ -117,19 +118,20 @@ namespace Medallion.Tools
                 .WithLeadingTrivia(node.GetLeadingTrivia())
                 .WithTrailingTrivia(node.GetTrailingTrivia());
 
-            return this.Visit(resultWithTrivia);
+            return resultWithTrivia;
         }
 
         public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
         {
-            PropertyDeclarationSyntax updated;
+            node = (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node);
+
             if (node.ExpressionBody != null)
             {
                 var block = SyntaxFactory.Block(
                     SyntaxFactory.ReturnStatement(node.ExpressionBody.Expression)
                 );
 
-                updated = node.WithExpressionBody(null)
+                return node.WithExpressionBody(null)
                     .WithSemicolonToken(default(SyntaxToken))
                     .WithAccessorList(
                         SyntaxFactory.AccessorList(
@@ -137,12 +139,8 @@ namespace Medallion.Tools
                         )
                     );
             }
-            else
-            {
-                updated = node;
-            }
 
-            return base.VisitPropertyDeclaration(updated);
+            return node;
         }
     }
 }
