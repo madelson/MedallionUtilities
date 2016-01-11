@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace Medallion.Tools
 {
-    internal class ProjectProcessor
+    public class Options
     {
+
     }
 }

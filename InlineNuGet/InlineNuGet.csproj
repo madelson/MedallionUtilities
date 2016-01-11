@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Medallion.Tools</RootNamespace>
     <AssemblyName>InlineNuGet</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
@@ -34,6 +34,10 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="MedallionShell, Version=1.1.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\MedallionShell.1.1.0\lib\net45\MedallionShell.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="Microsoft.CodeAnalysis, Version=1.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.CodeAnalysis.Common.1.0.0\lib\net45\Microsoft.CodeAnalysis.dll</HintPath>
       <Private>True</Private>
@@ -93,8 +97,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CSharp6SyntaxRewriter.cs" />
+    <Compile Include="DocumentMerger.cs" />
     <Compile Include="NullGuardRewriter.cs" />
-    <Compile Include="ProjectProcessor.cs" />
+    <Compile Include="InlineNuGetPackageCreator.cs" />
+    <Compile Include="NuspecUpdater.cs" />
+    <Compile Include="Options.cs" />
     <Compile Include="SyntaxRewriter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
