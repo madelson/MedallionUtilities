@@ -19,7 +19,7 @@ namespace Medallion.Collections
         public static IEnumerable<List<T>> Partition<T>(this IEnumerable<T> source, int partitionSize)
         {
             if (source == null) { throw new ArgumentNullException(nameof(source)); }
-            if (partitionSize < 1) { throw new ArgumentOutOfRangeException(paramName: nameof(partitionSize), message: $"Value must be >= 1 (got {partitionSize})"); }
+            if (partitionSize < 1) { throw new ArgumentOutOfRangeException(paramName: nameof(partitionSize), message: $"Value must be positive (got {partitionSize})"); }
             
             return PartitionIterator(source, partitionSize);
         }
@@ -46,32 +46,47 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Append ----
+        /// <summary>
+        /// As <see cref="Enumerable.Concat{TSource}(IEnumerable{TSource}, IEnumerable{TSource})"/>, but with better
+        /// performance for repeated calls. See http://blogs.msdn.com/b/wesdyer/archive/2007/03/23/all-about-iterators.aspx
+        /// </summary>
         public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> first, IEnumerable<TElement> second)
         {
-            Throw.IfNull(first, nameof(first));
-            Throw.IfNull(second, nameof(second));
+            if (first == null) { throw new ArgumentNullException(nameof(first)); }
+            if (second == null) { throw new ArgumentNullException(nameof(second)); }
 
             return new AppendEnumerable<TElement>(first, second);
         }
 
+        /// <summary>
+        /// As <see cref="Enumerable.Concat{TSource}(IEnumerable{TSource}, IEnumerable{TSource})"/>, but appends only one element
+        /// Optimized for repeated calls. See http://blogs.msdn.com/b/wesdyer/archive/2007/03/23/all-about-iterators.aspx
+        /// </summary>
         public static IEnumerable<TElement> Append<TElement>(this IEnumerable<TElement> sequence, TElement next)
         {
-            Throw.IfNull(sequence, nameof(sequence));
+            if (sequence == null) { throw new ArgumentNullException(nameof(sequence)); }
 
             return new AppendOneEnumerable<TElement>(sequence, next);
         }
 
+        /// <summary>
+        /// As <see cref="Append{TElement}(IEnumerable{TElement}, IEnumerable{TElement})"/>, but prepends the elements
+        /// instead
+        /// </summary>
         public static IEnumerable<TElement> Prepend<TElement>(this IEnumerable<TElement> second, IEnumerable<TElement> first)
         {
-            Throw.IfNull(first, nameof(first));
-            Throw.IfNull(second, nameof(second));
+            if (first == null) { throw new ArgumentNullException(nameof(first)); }
+            if (second == null { throw new ArgumentNullException(nameof(second)); }
 
             return new AppendEnumerable<TElement>(first, second);
         }
 
+        /// <summary>
+        /// As <see cref="Append{TElement}(IEnumerable{TElement}, TElement)"/>, but prepends an element instead
+        /// </summary>
         public static IEnumerable<TElement> Prepend<TElement>(this IEnumerable<TElement> sequence, TElement previous)
         {
-            Throw.IfNull(sequence, nameof(sequence));
+            if (sequence == null) { throw new ArgumentNullException(nameof(sequence)); }
 
             return new PrependOneEnumerable<TElement>(previous, sequence);
         }
@@ -250,29 +265,37 @@ namespace Medallion.Collections
         }
         #endregion
 
-        //#region ---- AtLeast / AtMost ----
-        //public static bool HasAtLeast<T>(this IEnumerable<T> source, int count)
-        //{
-        //    Throw.IfNull(source, nameof(source));
-        //    Throw.IfOutOfRange(count, nameof(count), min: 0);
+        #region ---- AtLeast / AtMost ----
+        /// <summary>
+        /// Determines whether <paramref name="source"/> has at least <paramref name="count"/> elements, enumerating
+        /// only as many elements as necessary
+        /// </summary>
+        public static bool HasAtLeast<T>(this IEnumerable<T> source, int count)
+        {
+            if (source == null) { throw new ArgumentNullException(nameof(source)); }
+            if (count < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(count), message: $"Value must be non-negative (got {count})"); }
 
-        //    int knownCount;
-        //    return TryFastCount(source, out knownCount)
-        //        ? knownCount >= count
-        //        : source.Take(count).Count() == count;
-        //}
+            int knownCount;
+            return TryFastCount(source, out knownCount)
+                ? knownCount >= count
+                : source.Take(count).Count() == count;
+        }
 
-        //public static bool HasAtMost<T>(this IEnumerable<T> source, int count)
-        //{
-        //    Throw.IfNull(source, nameof(source));
-        //    Throw.IfOutOfRange(count, nameof(count), min: 0, max: int.MaxValue - 1);
+        /// <summary>
+        /// Determines whether <paramref name="source"/> has at most <paramref name="count"/> elements, enumerating
+        /// only as many elements as necessary
+        /// </summary>
+        public static bool HasAtMost<T>(this IEnumerable<T> source, int count)
+        {
+            if (source == null) { throw new ArgumentNullException(nameof(source)); }
+            if (count < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(count), message: $"Value must be non-negative (got {count})"); }
 
-        //    int knownCount;
-        //    return TryFastCount(source, out knownCount)
-        //        ? knownCount <= count
-        //        : source.Take(count + 1).Count() <= count;
-        //}
-        //#endregion
+            int knownCount;
+            return TryFastCount(source, out knownCount)
+                ? knownCount <= count
+                : source.Take(checked(count + 1)).Count() <= count;
+        }
+        #endregion
 
         #region ---- MaxBy / MinBy ----
         public static T MaxBy<T, TKey>(this IEnumerable<T> source, Func<T, TKey> keySelector, IComparer<TKey> comparer = null)
@@ -683,7 +706,7 @@ namespace Medallion.Collections
             }
         }
         #endregion
-
+        
         private static bool TryFastCount<T>(IEnumerable<T> @this, out int count)
         {
             var collection = @this as ICollection<T>;
