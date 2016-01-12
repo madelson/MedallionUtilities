@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
-    public static class CollectionHelper
+    public static class Enumerables
     {
         #region ---- Partition ----
         /// <summary>
