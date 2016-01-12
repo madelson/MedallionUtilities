@@ -7,12 +7,20 @@ using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
+    /// <summary>
+    /// Contains utilities for creating and working with <see cref="IComparer{T}"/>s
+    /// </summary>
     public static class Comparers
     {
         #region ---- Key Comparer ----
+        /// <summary>
+        /// Creates a <see cref="Comparer{T}"/> which compares values of type <typeparamref name="T"/> by
+        /// projecting them to type <typeparamref name="TKey"/> using the given <paramref name="keySelector"/>.
+        /// The optional <paramref name="keyComparer"/> determines how keys are compared
+        /// </summary>
         public static Comparer<T> Create<T, TKey>(Func<T, TKey> keySelector, IComparer<TKey> keyComparer = null)
         {
-            Throw.IfNull(keySelector, nameof(keySelector));
+            if (keySelector == null) { throw new ArgumentNullException(nameof(keySelector)); }
 
             return new KeyComparer<T, TKey>(keySelector, keyComparer ?? Comparer<TKey>.Default);
         }
@@ -46,14 +54,22 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Reverse ----
+        /// <summary>
+        /// Gets an <see cref="IComparer{T}"/> which represents the reverse of
+        /// the order implied by <see cref="Comparer{T}.Default"/>
+        /// </summary>
         public static IComparer<T> Reverse<T>()
         {
             return ReverseComparer<T>.Default;
         }
 
+        /// <summary>
+        /// Gets an <see cref="IComparer{T}"/> which represents the reverse of
+        /// the order implied by the given <paramref name="comparer"/>
+        /// </summary>
         public static IComparer<T> Reverse<T>(this IComparer<T> comparer)
         {
-            Throw.IfNull(comparer, nameof(comparer));
+            if (comparer == null) { throw new ArgumentNullException(nameof(comparer)); }
 
             return comparer == Comparer<T>.Default
                 ? Reverse<T>()
@@ -86,10 +102,14 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- ThenBy ----
+        /// <summary>
+        /// Gets a <see cref="Comparer{T}"/> which compares using <paramref name="first"/>
+        /// and breaks ties with <paramref name="second"/>
+        /// </summary>
         public static Comparer<T> ThenBy<T>(this IComparer<T> first, IComparer<T> second)
         {
-            Throw.IfNull(first, nameof(first));
-            Throw.IfNull(second, nameof(second));
+            if (first == null) { throw new ArgumentNullException(nameof(first)); }
+            if (second == null) { throw new ArgumentNullException(nameof(second)); }
 
             return new ThenByComparer<T>(first, second);
         }
@@ -113,6 +133,10 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Sequence Comparer ----
+        /// <summary>
+        /// Gets a <see cref="Comparer{T}"/> which sorts sequences lexographically. The optional
+        /// <paramref name="elementComparer"/> can be used to override comparisons of individual elements
+        /// </summary>
         public static Comparer<IEnumerable<T>> GetSequenceComparer<T>(IComparer<T> elementComparer = null)
         {
             return elementComparer == null || elementComparer == Comparer<T>.Default
@@ -124,9 +148,7 @@ namespace Medallion.Collections
         {
             private static Comparer<IEnumerable<T>> defaultInstance;
             public static Comparer<IEnumerable<T>> DefaultInstance
-            {
-                get { return defaultInstance ?? (defaultInstance = new SequenceComparer<T>(Comparer<T>.Default)); }
-            }
+                => defaultInstance ?? (defaultInstance = new SequenceComparer<T>(Comparer<T>.Default));
 
             private readonly IComparer<T> elementComparer;
 
@@ -170,13 +192,9 @@ namespace Medallion.Collections
                         }
 
                         var cmp = this.elementComparer.Compare(xEnumerator.Current, yEnumerator.Current);
-                        if (cmp < 0)
+                        if (cmp != 0)
                         {
-                            return -1;
-                        }
-                        if (cmp > 0)
-                        {
-                            return 1;
+                            return cmp;
                         }
                     }
                 }
