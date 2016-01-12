@@ -298,63 +298,82 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- MaxBy / MinBy ----
-        public static T MaxBy<T, TKey>(this IEnumerable<T> source, Func<T, TKey> keySelector, IComparer<TKey> comparer = null)
+        /// <summary>
+        /// As <see cref="Enumerable.Max{TSource, TResult}(IEnumerable{TSource}, Func{TSource, TResult})"/>, but returns the
+        /// maximum item from the original sequence instead of the value projected by <paramref name="keySelector"/>. The
+        /// optional <paramref name="comparer"/> allows key comparisons to be specified
+        /// </summary>
+        public static TSource MaxBy<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector, IComparer<TKey> comparer = null)
         {
-            Throw.IfNull(source, nameof(source));
-            Throw.IfNull(keySelector, nameof(keySelector));
+            if (source == null) { throw new ArgumentNullException(nameof(source)); }
+            if (keySelector == null) { throw new ArgumentNullException(nameof(keySelector)); }
 
-            var comparerToUse = comparer ?? Comparer<TKey>.Default;
-
-            var maxKey = default(TKey);
-            var max = default(T);
-            if (maxKey == null)
+            var cmp = comparer ?? Comparer<TKey>.Default;
+            using (var enumerator = source.GetEnumerator())
             {
-                foreach (var item in source)
+                if (!enumerator.MoveNext())
                 {
-                    var key = keySelector(item);
-                    if (comparer.Compare(key, maxKey) > 0)
-                    {
-                        maxKey = key;
-                        max = item;
-                    }
+                    // just like native Min/Max, the empty sequence returns null for nullable types
+                    // and throws hard for non-nullable types
+                    if (default(TSource) == null) { return default(TSource); }
+                    throw new InvalidOperationException("Sequence contains no elements");       
                 }
-            }
-            else
-            {
-                var hasValue = false;
-                foreach (var item in source)
-                {
-                    var key = keySelector(item);
-                    if (hasValue)
-                    {
-                        if (comparer.Compare(key, maxKey) > 0)
-                        {
-                            maxKey = key;
-                            max = item;
-                        }
-                    }
-                    else
-                    {
-                        maxKey = key;
-                        max = item;
-                    }
-                }
-                if (!hasValue)
-                {
-                    throw new InvalidOperationException("Sequence contains no elements");
-                }
-            }
 
-            return max;
+                var bestValue = enumerator.Current;
+                var bestKey = keySelector(bestValue);
+                while (enumerator.MoveNext())
+                {
+                    var value = enumerator.Current;
+                    var key = keySelector(value);
+                    if (cmp.Compare(key, bestKey) > 0)
+                    {
+                        bestValue = value;
+                        bestKey = key;
+                    }
+                }
+
+                return bestValue;
+            }
         }
 
-        #endregion
-        // TODO maxby, minby
+        /// <summary>
+        /// As <see cref="Enumerable.Min{TSource, TResult}(IEnumerable{TSource}, Func{TSource, TResult})"/>, but returns the
+        /// minimum item from the original sequence instead of the value projected by <paramref name="keySelector"/>. The
+        /// optional <paramref name="comparer"/> allows key comparisons to be specified
+        /// </summary>
+        public static TSource MinBy<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector, IComparer<TKey> comparer = null)
+        {
+            if (source == null) { throw new ArgumentNullException(nameof(source)); }
+            if (keySelector == null) { throw new ArgumentNullException(nameof(keySelector)); }
 
-        // ideas:
-        // start with sequence compare
-        // could revert to sequence compare when dictionary is balanced
-        // could build dictionary inline & remove zeros
+            var cmp = comparer ?? Comparer<TKey>.Default;
+            using (var enumerator = source.GetEnumerator())
+            {
+                if (!enumerator.MoveNext())
+                {
+                    // just like native Min/Max, the empty sequence returns null for nullable types
+                    // and throws hard for non-nullable types
+                    if (default(TSource) == null) { return default(TSource); }
+                    throw new InvalidOperationException("Sequence contains no elements");
+                }
+
+                var bestValue = enumerator.Current;
+                var bestKey = keySelector(bestValue);
+                while (enumerator.MoveNext())
+                {
+                    var value = enumerator.Current;
+                    var key = keySelector(value);
+                    if (cmp.Compare(key, bestKey) < 0)
+                    {
+                        bestValue = value;
+                        bestKey = key;
+                    }
+                }
+
+                return bestValue;
+            }
+        }
+        #endregion
 
         #region ---- CollectionEquals ----
         /// <summary>
