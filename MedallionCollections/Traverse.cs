@@ -6,13 +6,24 @@ using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
+    /// <summary>
+    /// Provides utilities for iterating over DAG structures
+    /// </summary>
     public static class Traverse
     {
         #region ---- Along ----
+        /// <summary>
+        /// Enumerates the implicit sequence starting from <paramref name="root"/>
+        /// and following the chain of <paramref name="next"/> calls until a null value
+        /// is encountered. For example, this can be used to traverse a chain of exceptions:
+        /// <code>
+        ///     var innermostException = Traverse.Along(exception, e => e.InnerException).Last();
+        /// </code>
+        /// </summary>
         public static IEnumerable<T> Along<T>(T root, Func<T, T> next)
             where T : class
         {
-            Throw.IfNull(next, "next");
+            if (next == null) { throw new ArgumentNullException(nameof(next)); }
 
             return AlongIterator(root, next);
         }
@@ -27,9 +38,17 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Breadth-First ----
+        /// <summary>
+        /// Enumerates the implicit tree described by <paramref name="root"/> and <paramref name="children"/>
+        /// in a breadth-first manner. For example, this could be used to enumerate the exceptions of an
+        /// <see cref="AggregateException"/>:
+        /// <code>
+        ///     var allExceptions = Traverse.BreadthFirst((Exception)new AggregateException(), e => (e as AggregateException)?.InnerExceptions ?? Enumerable.Empty<Exception>());
+        /// </code>
+        /// </summary>
         public static IEnumerable<T> BreadthFirst<T>(T root, Func<T, IEnumerable<T>> children)
         {
-            Throw.IfNull(children, "children");
+            if (children == null) { throw new ArgumentNullException(nameof(children)); }
 
             return BreadthFirstIterator(root, children);
         }
@@ -53,9 +72,17 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Depth-First ----
+        /// <summary>
+        /// Enumerates the implicit tree described by <paramref name="root"/> and <paramref name="children"/>
+        /// in a depth-first manner. For example, this could be used to enumerate the exceptions of an
+        /// <see cref="AggregateException"/>:
+        /// <code>
+        ///     var allExceptions = Traverse.DepthFirst((Exception)new AggregateException(), e => (e as AggregateException)?.InnerExceptions ?? Enumerable.Empty<Exception>());
+        /// </code>
+        /// </summary>
         public static IEnumerable<T> DepthFirst<T>(T root, Func<T, IEnumerable<T>> children)
         {
-            Throw.IfNull(children, "children");
+            if (children == null) { throw new ArgumentNullException(nameof(children)); }
 
             return DepthFirstIterator(root, children);
         }
@@ -77,7 +104,5 @@ namespace Medallion.Collections
             }
         }
         #endregion
-
-        // todo distinct depth, breadth, pre-post order?
     }
 }

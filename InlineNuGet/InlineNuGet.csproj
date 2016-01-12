@@ -101,7 +101,6 @@
     <Compile Include="NullGuardRewriter.cs" />
     <Compile Include="InlineNuGetPackageCreator.cs" />
     <Compile Include="NuspecUpdater.cs" />
-    <Compile Include="Options.cs" />
     <Compile Include="SyntaxRewriter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

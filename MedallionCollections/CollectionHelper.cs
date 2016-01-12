@@ -11,11 +11,16 @@ namespace Medallion.Collections
     public static class CollectionHelper
     {
         #region ---- Partition ----
+        /// <summary>
+        /// Splits the given <paramref name="source"/> sequence into a series of <see cref="List{T}"/>s
+        /// of length <paramref name="partitionSize"/>. Note that the final partition may be less than
+        /// <paramref name="partitionSize"/>
+        /// </summary>
         public static IEnumerable<List<T>> Partition<T>(this IEnumerable<T> source, int partitionSize)
         {
-            Throw.IfNull(source, nameof(source));
-            Throw.IfOutOfRange(partitionSize, nameof(partitionSize), min: 1);
-
+            if (source == null) { throw new ArgumentNullException(nameof(source)); }
+            if (partitionSize < 1) { throw new ArgumentOutOfRangeException(paramName: nameof(partitionSize), message: $"Value must be >= 1 (got {partitionSize})"); }
+            
             return PartitionIterator(source, partitionSize);
         }
 

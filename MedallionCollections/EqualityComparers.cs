@@ -7,12 +7,21 @@ using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
+    /// <summary>
+    /// Provides utilities for creating and working with instances of <see cref="IEqualityComparer{T}"/>
+    /// </summary>
     public static class EqualityComparers
     {
         #region ---- Func Comparer ----
+        /// <summary>
+        /// Creates an <see cref="EqualityComparer{T}"/> using the given <paramref name="equals"/> function
+        /// for equality and the optional <paramref name="hash"/> function for hashing (if <param name="hash"> is not
+        /// provided, all values hash to 0). Note that null values are handled directly by the comparer and will not
+        /// be passed to these functions
+        /// </summary>
         public static EqualityComparer<T> Create<T>(Func<T, T, bool> equals, Func<T, int> hash = null)
         {
-            Throw.IfNull(equals, "equals");
+            if (equals == null) { throw new ArgumentNullException(nameof(equals)); }
 
             return new FuncEqualityComparer<T>(equals, hash);
         }
@@ -30,6 +39,7 @@ namespace Medallion.Collections
 
             public override bool Equals(T x, T y)
             {
+                // TODO do these cause boxing?
                 // null checks consistent with Equals(object, object)
                 return x == null
                     ? y == null
@@ -46,9 +56,15 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Key Comparer ----
+        /// <summary>
+        /// Creates an <see cref="EqualityComparer{T}"/> which compares elements of type <typeparamref name="T"/> by projecting
+        /// them to an instance of type <typeparamref name="TKey"/> using the provided <paramref name="keySelector"/> and comparing/hashing
+        /// these keys. The optional <param name="keyComparer"/> argument can be used to specify how the keys are compared. Note that null
+        /// values are handled directly by the comparer and will not be passed to <paramref name="keySelector"/>
+        /// </summary>
         public static EqualityComparer<T> Create<T, TKey>(Func<T, TKey> keySelector, IEqualityComparer<TKey> keyComparer = null)
         {
-            Throw.IfNull(keySelector, "keySelector");
+            if (keySelector == null) { throw new ArgumentNullException(nameof(keySelector)); }
 
             var keyComparerToUse = keyComparer ?? EqualityComparer<TKey>.Default;
             return new FuncEqualityComparer<T>(
@@ -59,6 +75,11 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Reference Comparer ----
+        /// <summary>
+        /// Gets a cached <see cref="EqualityComparer{T}"/> instance which performs all comparisons by reference
+        /// (i. e. as if with <see cref="object.ReferenceEquals(object, object)"/>). Uses 
+        /// <see cref="RuntimeHelpers.GetHashCode(object)"/> to emulate the native identity-based hash function
+        /// </summary>
         public static EqualityComparer<T> GetReferenceComparer<T>()
             where T : class
         {
@@ -84,6 +105,11 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Collection Comparer ----
+        /// <summary>
+        /// Gets an <see cref="EqualityComparer{T}"/> that compares instances of <see cref="IEnumerable{TElement}"/> as
+        /// if with <see cref="CollectionHelper.CollectionEquals{TElement}(IEnumerable{TElement}, IEnumerable{TElement}, IEqualityComparer{TElement})"/>.
+        /// The optional <paramref name="elementComparer"/> can be used to override the comparison of individual elements
+        /// </summary>
         public static EqualityComparer<IEnumerable<TElement>> GetCollectionComparer<TElement>(IEqualityComparer<TElement> elementComparer = null)
         {
             return elementComparer == null || elementComparer == EqualityComparer<TElement>.Default
@@ -127,6 +153,7 @@ namespace Medallion.Collections
             public override int GetHashCode(IEnumerable<TElement> obj)
             {
                 return obj != null
+                    // combine hashcodes with xor to be order-insensitive
                     ? obj.Aggregate(-1, (hash, element) => hash ^ this.elementComparer.GetHashCode(element))
                     : 0;
             }
@@ -134,6 +161,11 @@ namespace Medallion.Collections
         #endregion
 
         #region ---- Sequence Comparer ----
+        /// <summary>
+        /// Gets an <see cref="EqualityComparer{T}"/> which compares instances of <see cref="IEnumerable{TElement}"/> as if
+        /// with <see cref="Enumerable.SequenceEqual{TSource}(IEnumerable{TSource}, IEnumerable{TSource})"/>. The optional 
+        /// <paramref name="elementComparer"/> can be used to override the comparison of individual elements
+        /// </summary>
         public static EqualityComparer<IEnumerable<TElement>> GetSequenceComparer<TElement>(IEqualityComparer<TElement> elementComparer = null)
         {
             return elementComparer == null || elementComparer == EqualityComparer<TElement>.Default

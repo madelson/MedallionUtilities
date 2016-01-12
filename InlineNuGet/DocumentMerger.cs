@@ -51,5 +51,25 @@ namespace Medallion.Tools
 
             return result;
         }
+
+        //private static IEnumerable<MemberDeclarationSyntax> MergeNamespaceMembers(IReadOnlyCollection<NamespaceDeclarationSyntax> namespaces)
+        //{
+        //}
+
+        //private static TypeDeclarationSyntax MergePartialTypeDeclarations(IReadOnlyCollection<TypeDeclarationSyntax> typeDeclarations)
+        //{
+        //    if (typeDeclarations.Count == 1) { return typeDeclarations.Single(); }
+
+        //    switch (typeDeclarations.First().Kind())
+        //    {
+        //        case SyntaxKind.ClassDeclaration:
+        //            var nodes = typeDeclarations.Cast<ClassDeclarationSyntax>();
+        //            return nodes.First().Update(
+        //                SyntaxFactory.List(nodes.Select(n => n.att)))
+        //            break;
+        //        default:
+        //            throw new InvalidOperationException($"Unexpected kind {typeDeclarations.First().Kind()}");
+        //    }
+        //}
     }
 }
