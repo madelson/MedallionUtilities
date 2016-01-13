@@ -32,6 +32,7 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -58,6 +59,7 @@
   <ItemGroup>
     <Compile Include="Collections\AppendTest.cs" />
     <Compile Include="Collections\CollectionEqualsTest.cs" />
+    <Compile Include="Collections\ComparersTest.cs" />
     <Compile Include="Collections\EmptyTest.cs" />
     <Compile Include="Collections\EnumerablesTest.cs" />
     <Compile Include="Enums\EnumTest.cs" />
