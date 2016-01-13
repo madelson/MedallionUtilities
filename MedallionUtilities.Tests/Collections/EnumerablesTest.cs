@@ -53,35 +53,5 @@ namespace Medallion.Collections
             new[] { 1, 2, 3, 2, 1 }.MinBy(i => 2 * i, Comparers.Reverse<int>()).ShouldEqual(3);
             new[] { 3, 2, 1, 2, 3 }.MaxBy(i => 2 * i, Comparers.Reverse<int>()).ShouldEqual(1);
         }
-
-        [Fact]
-        public void TestHasAtLeastAndHasAtMost()
-        {
-            var lazySequence = Enumerable.Range(0, 10);
-            var staticSequence = lazySequence.ToArray();
-
-            Assert.Throws<ArgumentNullException>(() => default(IEnumerable<int>).HasAtLeast(1));
-            Assert.Throws<ArgumentNullException>(() => default(IEnumerable<int>).HasAtMost(1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => lazySequence.HasAtLeast(-1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => lazySequence.HasAtMost(-1));
-
-            lazySequence.HasAtLeast(0).ShouldEqual(true);
-            staticSequence.HasAtLeast(0).ShouldEqual(true);
-            lazySequence.HasAtLeast(10).ShouldEqual(true);
-            staticSequence.HasAtLeast(10).ShouldEqual(true);
-            lazySequence.HasAtLeast(11).ShouldEqual(false);
-            staticSequence.HasAtLeast(11).ShouldEqual(false);
-            Assert.Throws<ArithmeticException>(() => lazySequence.HasAtLeast(int.MaxValue));
-            staticSequence.HasAtLeast(int.MaxValue).ShouldEqual(false);
-
-            lazySequence.HasAtMost(0).ShouldEqual(false);
-            staticSequence.HasAtMost(0).ShouldEqual(false);
-            lazySequence.HasAtMost(10).ShouldEqual(true);
-            staticSequence.HasAtMost(10).ShouldEqual(true);
-            lazySequence.HasAtMost(11).ShouldEqual(true);
-            staticSequence.HasAtMost(11).ShouldEqual(true);
-            lazySequence.HasAtMost(int.MaxValue).ShouldEqual(true);
-            staticSequence.HasAtMost(int.MaxValue).ShouldEqual(true);
-        }
     }
 }

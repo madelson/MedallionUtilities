@@ -264,39 +264,7 @@ namespace Medallion.Collections
             public override IEnumerable<TElement> PreviousElements { get { return null; } }
         }
         #endregion
-
-        #region ---- AtLeast / AtMost ----
-        /// <summary>
-        /// Determines whether <paramref name="source"/> has at least <paramref name="count"/> elements, enumerating
-        /// only as many elements as necessary
-        /// </summary>
-        public static bool HasAtLeast<T>(this IEnumerable<T> source, int count)
-        {
-            if (source == null) { throw new ArgumentNullException(nameof(source)); }
-            if (count < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(count), message: $"Value must be non-negative (got {count})"); }
-
-            int knownCount;
-            return TryFastCount(source, out knownCount)
-                ? knownCount >= count
-                : source.Take(count).Count() == count;
-        }
-
-        /// <summary>
-        /// Determines whether <paramref name="source"/> has at most <paramref name="count"/> elements, enumerating
-        /// only as many elements as necessary
-        /// </summary>
-        public static bool HasAtMost<T>(this IEnumerable<T> source, int count)
-        {
-            if (source == null) { throw new ArgumentNullException(nameof(source)); }
-            if (count < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(count), message: $"Value must be non-negative (got {count})"); }
-
-            int knownCount;
-            return TryFastCount(source, out knownCount)
-                ? knownCount <= count
-                : source.Take(checked(count + 1)).Count() <= count;
-        }
-        #endregion
-
+        
         #region ---- MaxBy / MinBy ----
         /// <summary>
         /// As <see cref="Enumerable.Max{TSource, TResult}(IEnumerable{TSource}, Func{TSource, TResult})"/>, but returns the
