@@ -8,27 +8,58 @@ using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
+    /// <summary>
+    /// Provides access to cached immutable instances of empty collections implementing various
+    /// interfaces. The collections provided by this class are optimized empty implementations, and
+    /// do no work when methods are called. Similarly, the can be enumerated without allocation
+    /// </summary>
     public static class Empty
     {
+        /// <summary>A cached instance of <see cref="IEnumerable"/></summary>
         public static IEnumerable ObjectEnumerable => EmptyCollection<object>.Instance;
+
+        /// <summary>A cached readonly instance of <see cref="ICollection"/></summary>
         public static ICollection ObjectCollection => EmptyCollection<object>.Instance;
+        
+        /// <summary>A cached readonly instance of <see cref="IList"/></summary>
         public static IList ObjectList => EmptyCollection<object>.Instance;
+        
+        /// <summary>A cached readonly instance of <see cref="IDictionary"/></summary>
         public static IDictionary ObjectDictionary => EmptyDictionary<object, object>.Instance;
 
+        /// <summary>A cached instance of <see cref="IEnumerable{T}"/></summary>
         public static IEnumerable<T> Enumerable<T>() => EmptyCollection<T>.Instance;
+
+        /// <summary>A cached readonly instance of <see cref="ICollection{T}"/></summary>
         public static ICollection<T> Collection<T>() => EmptyCollection<T>.Instance;
+        
+        /// <summary>A cached instance of <see cref="IReadOnlyCollection{T}"/></summary>
         public static IReadOnlyCollection<T> ReadOnlyCollection<T>() => EmptyCollection<T>.Instance;
+        
+        /// <summary>A cached instance of an array of <typeparamref name="T"/></summary>
         public static T[] Array<T>() => EmptyArray<T>.Instance;
+
+        /// <summary>A cached readonly instance of <see cref="IList{T}"/></summary>
         public static IList<T> List<T>() => EmptyCollection<T>.Instance;
+        
+        /// <summary>A cached instance of <see cref="IReadOnlyList{T}"/></summary>
         public static IReadOnlyList<T> ReadOnlyList<T>() => EmptyCollection<T>.Instance;
+
+        /// <summary>A cached readonly instance of <see cref="ISet{T}"/></summary>
         public static ISet<T> Set<T>() => EmptyCollection<T>.Instance;
+
+        /// <summary>A cached readonly instance of <see cref="IDictionary{TKey, TValue}"/></summary>
         public static IDictionary<TKey, TValue> Dictionary<TKey, TValue>() => EmptyDictionary<TKey, TValue>.Instance;
+        
+        /// <summary>A cached instance of <see cref="IReadOnlyDictionary{TKey, TValue}"/></summary>
         public static IReadOnlyDictionary<TKey, TValue> ReadOnlyDictionary<TKey, TValue>() => EmptyDictionary<TKey, TValue>.Instance;
 
         #region ---- Empty Array ----
         private static class EmptyArray<TElement>
         {
-            public static readonly TElement[] Instance = (Enumerable.Empty<TElement>() as TElement[]) ?? new TElement[0];
+            // this takes advantage of the fact that Enumerable.Empty() is currently implemented
+            // using a cached empty array without depending on that fact
+            public static readonly TElement[] Instance = (System.Linq.Enumerable.Empty<TElement>() as TElement[]) ?? new TElement[0];
         }
         #endregion
 
@@ -112,14 +143,14 @@ namespace Medallion.Collections
 
             void ICollection.CopyTo(Array array, int index)
             {
-                Throw.IfNull(array, "array");
-                Throw.IfOutOfRange(index, "index", min: 0, max: array.Length);
+                if (array == null) { throw new ArgumentNullException(nameof(array)); }
+                if (index < 0 || index > array.Length) { throw new ArgumentOutOfRangeException(nameof(index)); }
             }
 
             void ICollection<TElement>.CopyTo(TElement[] array, int arrayIndex)
             {
-                Throw.IfNull(array, "array");
-                Throw.IfOutOfRange(arrayIndex, "arrayIndex", min: 0, max: array.Length);
+                if (array == null) { throw new ArgumentNullException(nameof(array)); }
+                if (arrayIndex < 0 || arrayIndex > array.Length) { throw new ArgumentOutOfRangeException(nameof(arrayIndex)); }
             }
 
             void IDisposable.Dispose()
@@ -162,25 +193,25 @@ namespace Medallion.Collections
 
             bool ISet<TElement>.IsProperSubsetOf(IEnumerable<TElement> other)
             {
-                Throw.IfNull(other, "other");
+                if (other == null) { throw new ArgumentNullException(nameof(other)); }
                 return other.Any();
             }
 
             bool ISet<TElement>.IsProperSupersetOf(IEnumerable<TElement> other)
             {
-                Throw.IfNull(other, "other");
+                if (other == null) { throw new ArgumentNullException(nameof(other)); }
                 return false;
             }
 
             bool ISet<TElement>.IsSubsetOf(IEnumerable<TElement> other)
             {
-                Throw.IfNull(other, "other");
+                if (other == null) { throw new ArgumentNullException(nameof(other)); }
                 return true;
             }
 
             bool ISet<TElement>.IsSupersetOf(IEnumerable<TElement> other)
             {
-                Throw.IfNull(other, "other");
+                if (other == null) { throw new ArgumentNullException(nameof(other)); }
                 return !other.Any();
             }
 
@@ -188,7 +219,7 @@ namespace Medallion.Collections
 
             bool ISet<TElement>.Overlaps(IEnumerable<TElement> other)
             {
-                Throw.IfNull(other, nameof(other));
+                if (other == null) { throw new ArgumentNullException(nameof(other)); }
                 return false;
             }
 
@@ -218,7 +249,7 @@ namespace Medallion.Collections
 
             bool ISet<TElement>.SetEquals(IEnumerable<TElement> other)
             {
-                Throw.IfNull(other, "other");
+                if (other == null) { throw new ArgumentNullException(nameof(other)); }
                 return !other.Any();
             }
 
