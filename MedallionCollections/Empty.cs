@@ -374,7 +374,7 @@ namespace Medallion.Collections
 
         private static Exception ThrowReadOnly([CallerMemberName] string memberName = null)
         {
-            throw new InvalidOperationException(memberName + ": the collection is read-only");
+            throw new NotSupportedException(memberName + ": the collection is read-only");
         }
     }
 }
