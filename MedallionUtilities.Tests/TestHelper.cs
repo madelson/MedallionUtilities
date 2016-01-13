@@ -22,6 +22,12 @@ namespace Medallion
             }
 
             return actual;
-        } 
+        }
+
+        public static IEnumerable<T> SequenceShouldEqual<T>(this IEnumerable<T> actual, IEnumerable<T> expected, IEqualityComparer<T> comparer = null)
+        {
+            Assert.True(actual.SequenceEqual(expected, comparer ?? EqualityComparer<T>.Default));
+            return actual;
+        }
     }
 }

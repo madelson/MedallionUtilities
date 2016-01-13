@@ -28,7 +28,7 @@ namespace Medallion.Collections
         {
             // we like initializing our lists with capacity to avoid resizes. However, we don't want to trigger
             // OutOfMemory if the partition size is huge
-            var initialCapacity = Math.Max(partitionSize, 1024);
+            var initialCapacity = Math.Min(partitionSize, 1024);
 
             using (var enumerator = source.GetEnumerator())
             {
@@ -76,7 +76,7 @@ namespace Medallion.Collections
         public static IEnumerable<TElement> Prepend<TElement>(this IEnumerable<TElement> second, IEnumerable<TElement> first)
         {
             if (first == null) { throw new ArgumentNullException(nameof(first)); }
-            if (second == null { throw new ArgumentNullException(nameof(second)); }
+            if (second == null) { throw new ArgumentNullException(nameof(second)); }
 
             return new AppendEnumerable<TElement>(first, second);
         }
@@ -311,12 +311,13 @@ namespace Medallion.Collections
             var cmp = comparer ?? Comparer<TKey>.Default;
             using (var enumerator = source.GetEnumerator())
             {
+                var isNullable = default(TSource) == null;
                 if (!enumerator.MoveNext())
                 {
                     // just like native Min/Max, the empty sequence returns null for nullable types
                     // and throws hard for non-nullable types
-                    if (default(TSource) == null) { return default(TSource); }
-                    throw new InvalidOperationException("Sequence contains no elements");       
+                    if (isNullable) { return default(TSource); }
+                    throw new InvalidOperationException("Sequence contains no elements");
                 }
 
                 var bestValue = enumerator.Current;
@@ -325,7 +326,11 @@ namespace Medallion.Collections
                 {
                     var value = enumerator.Current;
                     var key = keySelector(value);
-                    if (cmp.Compare(key, bestKey) > 0)
+
+                    if (isNullable
+                        // like Min/Max, nulls are excluded from the comparison
+                        ? (bestKey == null || (cmp.Compare(key, bestKey) > 0 && key != null))
+                        : cmp.Compare(key, bestKey) > 0)
                     {
                         bestValue = value;
                         bestKey = key;
@@ -349,11 +354,12 @@ namespace Medallion.Collections
             var cmp = comparer ?? Comparer<TKey>.Default;
             using (var enumerator = source.GetEnumerator())
             {
+                var isNullable = default(TSource) == null;
                 if (!enumerator.MoveNext())
                 {
                     // just like native Min/Max, the empty sequence returns null for nullable types
                     // and throws hard for non-nullable types
-                    if (default(TSource) == null) { return default(TSource); }
+                    if (isNullable) { return default(TSource); }
                     throw new InvalidOperationException("Sequence contains no elements");
                 }
 
@@ -363,7 +369,11 @@ namespace Medallion.Collections
                 {
                     var value = enumerator.Current;
                     var key = keySelector(value);
-                    if (cmp.Compare(key, bestKey) < 0)
+
+                    if (isNullable
+                        // like Min/Max, nulls are excluded from the comparison
+                        ? (bestKey == null || (cmp.Compare(key, bestKey) < 0 && key != null))
+                        : cmp.Compare(key, bestKey) < 0)
                     {
                         bestValue = value;
                         bestKey = key;
