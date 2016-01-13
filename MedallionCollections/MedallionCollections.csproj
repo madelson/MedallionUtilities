@@ -45,8 +45,6 @@
     <Compile Include="Comparers.cs" />
     <Compile Include="DictionaryBase.cs" />
     <Compile Include="Empty.cs" />
-    <Compile Include="Empty`.cs" />
-    <Compile Include="Empty``.cs" />
     <Compile Include="EqualityComparers.cs" />
     <Compile Include="MutableCollectionBase.cs" />
     <Compile Include="MutableDictionaryBase.cs" />
