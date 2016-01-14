@@ -62,6 +62,7 @@
     <Compile Include="Collections\ComparersTest.cs" />
     <Compile Include="Collections\EmptyTest.cs" />
     <Compile Include="Collections\EnumerablesTest.cs" />
+    <Compile Include="Collections\EqualityComparersTest.cs" />
     <Compile Include="Collections\TraverseTest.cs" />
     <Compile Include="Enums\EnumTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

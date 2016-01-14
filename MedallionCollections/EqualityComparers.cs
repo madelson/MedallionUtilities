@@ -146,8 +146,7 @@ namespace Medallion.Collections
                     return false;
                 }
 
-                throw new NotImplementedException();
-                //return x.CollectionEquals(y, this.elementComparer);
+                return x.CollectionEquals(y, this.elementComparer);
             }
 
             public override int GetHashCode(IEnumerable<TElement> obj)

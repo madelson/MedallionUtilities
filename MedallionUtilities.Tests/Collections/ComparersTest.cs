@@ -37,6 +37,9 @@ namespace Medallion.Collections
 
             new[] { "abc", "cab", "bac" }.OrderBy(s => s, reverseBackwardsStringComparer)
                 .SequenceShouldEqual(new[] { "abc", "bac", "cab" });
+
+            Assert.Throws<ArgumentNullException>(() => reverseBackwardsStringComparer.Compare("a", null));
+            Math.Sign(Comparer<int?>.Default.Reverse().Compare(1, null)).ShouldEqual(-1);
         }
 
         [Fact]
