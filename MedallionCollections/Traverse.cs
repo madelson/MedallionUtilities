@@ -55,19 +55,22 @@ namespace Medallion.Collections
 
         private static IEnumerable<T> BreadthFirstIterator<T>(T root, Func<T, IEnumerable<T>> children)
         {
-            var queue = new Queue<T>();
-            queue.Enqueue(root);
+            // note that this implementation has two nice properties which require a bit more complexity
+            // in the code: (1) children are yielded in order and (2) child enumerators are fully lazy
 
-            while (queue.Count > 0)
+            yield return root;
+            var queue = new Queue<IEnumerable<T>>();
+            queue.Enqueue(children(root));
+
+            do
             {
-                var next = queue.Dequeue();
-                yield return next;
-
-                foreach (var child in children(next))
+                foreach (var child in queue.Dequeue())
                 {
-                    queue.Enqueue(child);
+                    yield return child;
+                    queue.Enqueue(children(child));
                 }
             }
+            while (queue.Count > 0);
         }
         #endregion
 
@@ -89,17 +92,61 @@ namespace Medallion.Collections
 
         private static IEnumerable<T> DepthFirstIterator<T>(T root, Func<T, IEnumerable<T>> children)
         {
-            var stack = new Stack<T>();
-            stack.Push(root);
+            // note that this implementation has two nice properties which require a bit more complexity
+            // in the code: (1) children are yielded in order and (2) child enumerators are fully lazy
 
-            while (stack.Count > 0)
+            var current = root;
+            var stack = new Stack<IEnumerator<T>>();
+
+            try
             {
-                var next = stack.Pop();
-                yield return next;
-
-                foreach (var child in children(next))
+                while (true)
                 {
-                    stack.Push(child);
+                    yield return current;
+                    
+                    var childrenEnumerator = children(current).GetEnumerator();
+                    if (childrenEnumerator.MoveNext())
+                    {
+                        // if we have children, the first child is our next current
+                        // and push the new enumerator
+                        current = childrenEnumerator.Current;
+                        stack.Push(childrenEnumerator);
+                    }
+                    else
+                    {
+                        // otherwise, cleanup the empty enumerator and...
+                        childrenEnumerator.Dispose();
+
+                        // search up the stack for an enumerator with elements left
+                        while (true)
+                        {
+                            if (stack.Count == 0)
+                            {
+                                // we didn't find one, so we're all done
+                                yield break;
+                            }
+
+                            var topEnumerator = stack.Peek();
+                            if (topEnumerator.MoveNext())
+                            {
+                                current = topEnumerator.Current;
+                                break;
+                            }
+                            else
+                            {
+                                stack.Pop().Dispose();
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                // guarantee that everything is cleaned up even
+                // if we don't enumerate all the way through
+                while (stack.Count > 0)
+                {
+                    stack.Pop().Dispose();
                 }
             }
         }
