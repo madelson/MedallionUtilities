@@ -464,7 +464,7 @@ namespace Medallion.IO
             }
         }
 
-        public override int WriteTimeout
+        public sealed override int WriteTimeout
         {
             get
             {

@@ -1,7 +1,6 @@
 ﻿using NullGuard;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -118,7 +117,14 @@ namespace Medallion.Async
                     var tupleState = (Tuple<TaskCompletionSource<TResult>, Func<TTask, object, TResult>, object>)state;
                     if (t.IsFaulted)
                     {
-                        tupleState.Item1.TrySetException(t.Exception.InnerExceptions);
+                        if (t.Exception.InnerExceptions.Count == 1)
+                        {
+                            tupleState.Item1.TrySetException(t.Exception.InnerException);
+                        }
+                        else
+                        {
+                            tupleState.Item1.TrySetException(t.Exception.InnerExceptions);
+                        }
                     }
                     else if (t.IsCanceled)
                     {
@@ -126,6 +132,7 @@ namespace Medallion.Async
                     }
                     else
                     {
+                        // todo need try-catch here if the result factory fails?
                         tupleState.Item1.TrySetResult(tupleState.Item2((TTask)t, tupleState.Item3));
                     }
                 },
@@ -166,6 +173,7 @@ namespace Medallion.Async
             TaskContinuationOptions continuationOptions = TaskContinuationOptions.None,
             TaskScheduler scheduler = null)
         {
+            // todo creates extra tasks
             return new TaskCompletionSource<bool>()
                 .InternalCompleteWith(
                     task, 
