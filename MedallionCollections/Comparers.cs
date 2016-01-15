@@ -50,6 +50,21 @@ namespace Medallion.Collections
 
                 return this.keyComparer.Compare(this.keySelector(x), this.keySelector(y));
             }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as KeyComparer<T, TKey>;
+                return that != null
+                    && that.keySelector.Equals(this.keySelector)
+                    && that.keyComparer.Equals(this.keyComparer);
+            }
+
+            public override int GetHashCode()
+            {
+                return unchecked((3 * this.keySelector.GetHashCode()) + this.keyComparer.GetHashCode());
+            }
         }
         #endregion
 
@@ -98,6 +113,21 @@ namespace Medallion.Collections
             {
                 return this.Compare((T)x, (T)y);
             }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as ReverseComparer<T>;
+                return that != null && that.comparer.Equals(this.comparer);
+            }
+
+            public override int GetHashCode()
+            {
+                return ReferenceEquals(this, Default)
+                    ? base.GetHashCode()
+                    : unchecked((3 * Default.GetHashCode()) + this.comparer.GetHashCode());
+            }
         }
         #endregion
 
@@ -128,6 +158,21 @@ namespace Medallion.Collections
             {
                 var firstComparison = this.first.Compare(x, y);
                 return firstComparison != 0 ? firstComparison : this.second.Compare(x, y);
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as ThenByComparer<T>;
+                return that != null
+                    && that.first.Equals(this.first)
+                    && that.second.Equals(this.second);
+            }
+
+            public override int GetHashCode()
+            {
+                return unchecked((3 * this.first.GetHashCode()) + this.second.GetHashCode());
             }
         }
         #endregion
@@ -198,6 +243,21 @@ namespace Medallion.Collections
                         }
                     }
                 }
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as SequenceComparer<T>;
+                return that != null && that.elementComparer.Equals(this.elementComparer);
+            }
+
+            public override int GetHashCode()
+            {
+                return ReferenceEquals(this, DefaultInstance)
+                    ? base.GetHashCode()
+                    : unchecked((3 * DefaultInstance.GetHashCode()) + this.elementComparer.GetHashCode());
             }
         }
         #endregion

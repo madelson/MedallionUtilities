@@ -28,13 +28,15 @@ namespace Medallion.Collections
 
         private sealed class FuncEqualityComparer<T> : EqualityComparer<T>
         {
+            private static readonly Func<T, int> DefaultHash = _ => -1;
+
             private readonly Func<T, T, bool> equals;
             private readonly Func<T, int> hash;
 
             public FuncEqualityComparer(Func<T, T, bool> equals, Func<T, int> hash)
             {
                 this.equals = equals;
-                this.hash = hash;
+                this.hash = hash ?? DefaultHash;
             }
 
             public override bool Equals(T x, T y)
@@ -48,9 +50,23 @@ namespace Medallion.Collections
 
             public override int GetHashCode(T obj)
             {
-                return obj == null ? 0 // consistent with GetHashCode(object)
-                    : this.hash == null ? -1
-                    : this.hash(obj);
+                // consistent with GetHashCode(object)
+                return obj == null ? 0 : this.hash(obj);
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as FuncEqualityComparer<T>;
+                return that != null
+                    && that.equals.Equals(this.equals)
+                    && that.hash.Equals(this.hash);
+            }
+
+            public override int GetHashCode()
+            {
+                return unchecked((3 * this.equals.GetHashCode()) + this.hash.GetHashCode());
             }
         }
         #endregion
@@ -66,11 +82,47 @@ namespace Medallion.Collections
         {
             if (keySelector == null) { throw new ArgumentNullException(nameof(keySelector)); }
 
-            var keyComparerToUse = keyComparer ?? EqualityComparer<TKey>.Default;
-            return new FuncEqualityComparer<T>(
-                equals: (@this, that) => keyComparerToUse.Equals(keySelector(@this), keySelector(that)),
-                hash: obj => keyComparerToUse.GetHashCode(keySelector(obj))
-            );
+            return new KeyComparer<T, TKey>(keySelector, keyComparer);
+        }
+
+        private sealed class KeyComparer<T, TKey> : EqualityComparer<T>
+        {
+            private readonly Func<T, TKey> keySelector;
+            private readonly IEqualityComparer<TKey> keyComparer;
+
+            public KeyComparer(Func<T, TKey> keySelector, IEqualityComparer<TKey> keyComparer)
+            {
+                this.keySelector = keySelector;
+                this.keyComparer = keyComparer ?? EqualityComparer<TKey>.Default;
+            }
+
+            public override bool Equals(T x, T y)
+            {
+                if (x == null) { return y == null; }
+                if (y == null) { return false; }
+
+                return this.keyComparer.Equals(this.keySelector(x), this.keySelector(y));
+            }
+
+            public override int GetHashCode(T obj)
+            {
+                return obj == null ? 0 : this.keyComparer.GetHashCode(this.keySelector(obj));
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as KeyComparer<T, TKey>;
+                return that != null
+                    && that.keySelector.Equals(this.keySelector)
+                    && that.keyComparer.Equals(this.keyComparer);
+            }
+
+            public override int GetHashCode()
+            {
+                return unchecked((3 * this.keySelector.GetHashCode()) + this.keyComparer.GetHashCode());
+            }
         }
         #endregion
 
@@ -156,6 +208,21 @@ namespace Medallion.Collections
                     ? obj.Aggregate(-1, (hash, element) => hash ^ this.elementComparer.GetHashCode(element))
                     : 0;
             }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as CollectionComparer<TElement>;
+                return that != null && that.elementComparer.Equals(this.elementComparer);
+            }
+
+            public override int GetHashCode()
+            {
+                return ReferenceEquals(this, DefaultInstance)
+                    ? base.GetHashCode()
+                    : unchecked((3 * DefaultInstance.GetHashCode()) + this.elementComparer.GetHashCode());
+            }
         }
         #endregion
 
@@ -210,6 +277,21 @@ namespace Medallion.Collections
                     // hash combine logic based on .NET Tuple.CombineHashCodes
                     ? obj.Aggregate(-1, (hash, element) => (((hash << 5) + hash) ^ this.elementComparer.GetHashCode(element)))
                     : 0;
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (ReferenceEquals(obj, this)) { return true; }
+
+                var that = obj as SequenceComparer<TElement>;
+                return that != null && that.elementComparer.Equals(this.elementComparer);
+            }
+
+            public override int GetHashCode()
+            {
+                return ReferenceEquals(this, DefaultInstance)
+                    ? base.GetHashCode()
+                    : unchecked((3 * DefaultInstance.GetHashCode()) + this.elementComparer.GetHashCode());
             }
         }
         #endregion

@@ -68,5 +68,28 @@ namespace Medallion.Collections
             Math.Sign(Comparers.GetSequenceComparer<int>().Compare(Empty.Array<int>(), new[] { 1 }))
                 .ShouldEqual(-1);
         }
+
+        [Fact]
+        public void TestComparerEquality()
+        {
+            Func<int, int> f = i => -i;
+            TestEquality(Comparers.Create(f), Comparers.Create(f), Comparers.Create((int i) => i.ToString()));
+
+            TestEquality(Comparers.Reverse<int>(), Comparers.Reverse<int>(), Comparers.Create((int i) => i.ToString()).Reverse());
+
+            var first = Comparers.Create((string s) => s.Length);
+            var second = Comparers.Create((string s) => s[0]);
+            TestEquality(first.ThenBy(second), first.ThenBy(second), second.ThenBy(first));
+
+            TestEquality(Comparers.GetSequenceComparer<string>(), Comparers.GetSequenceComparer(Comparer<string>.Default), Comparers.GetSequenceComparer(StringComparer.OrdinalIgnoreCase));
+        }
+
+        public static void TestEquality(object obj, object equal, object notEqual)
+        {
+            Equals(obj, equal).ShouldEqual(true);
+            Equals(obj, notEqual).ShouldEqual(false);
+            obj.GetHashCode().ShouldEqual(equal.GetHashCode());
+            Assert.NotEqual(obj.GetHashCode(), notEqual.GetHashCode());
+        }
     }
 }

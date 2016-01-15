@@ -113,5 +113,21 @@ namespace Medallion.Collections
             stringComparer.GetHashCode(aa).ShouldEqual(stringComparer.GetHashCode(bb));
             Assert.NotEqual(stringComparer.GetHashCode(aa), stringComparer.GetHashCode(cc));
         }
+
+        [Fact]
+        public void TestComparerEquality()
+        {
+            Func<string, string, bool> sameLength = (a, b) => a.Length == b.Length;
+            Func<string, int> getLength = s => s.Length;
+            ComparersTest.TestEquality(EqualityComparers.Create(sameLength, getLength), EqualityComparers.Create(sameLength, getLength), EqualityComparers.Create(getLength));
+
+            ComparersTest.TestEquality(EqualityComparers.Create(getLength), EqualityComparers.Create(getLength, EqualityComparer<int>.Default), EqualityComparers.Create((string s) => s[0]));
+
+            ComparersTest.TestEquality(EqualityComparers.GetReferenceComparer<string>(), EqualityComparers.GetReferenceComparer<string>(), EqualityComparer<string>.Default);
+
+            ComparersTest.TestEquality(EqualityComparers.GetCollectionComparer(EqualityComparer<string>.Default), EqualityComparers.GetCollectionComparer<string>(), EqualityComparers.GetCollectionComparer(StringComparer.OrdinalIgnoreCase));
+
+            ComparersTest.TestEquality(EqualityComparers.GetSequenceComparer(StringComparer.Ordinal), EqualityComparers.GetSequenceComparer(StringComparer.Ordinal), EqualityComparers.GetCollectionComparer(StringComparer.Ordinal));
+        }
     }
 }
