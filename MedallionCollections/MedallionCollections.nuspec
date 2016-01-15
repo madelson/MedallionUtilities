@@ -17,6 +17,5 @@
   </metadata>
   <files>
     <file src="bin/Debug/MedallionCollections.XML" />
-    <file src="bin/Debug/MedallionCollections.pdb" />
   </files>
 </package>
