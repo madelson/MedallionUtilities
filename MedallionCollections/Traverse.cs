@@ -43,7 +43,7 @@ namespace Medallion.Collections
         /// in a breadth-first manner. For example, this could be used to enumerate the exceptions of an
         /// <see cref="AggregateException"/>:
         /// <code>
-        ///     var allExceptions = Traverse.BreadthFirst((Exception)new AggregateException(), e => (e as AggregateException)?.InnerExceptions ?? Enumerable.Empty<Exception>());
+        ///     var allExceptions = Traverse.BreadthFirst((Exception)new AggregateException(), e => (e as AggregateException)?.InnerExceptions ?? Enumerable.Empty&lt;Exception&gt;());
         /// </code>
         /// </summary>
         public static IEnumerable<T> BreadthFirst<T>(T root, Func<T, IEnumerable<T>> children)
@@ -80,7 +80,7 @@ namespace Medallion.Collections
         /// in a depth-first manner. For example, this could be used to enumerate the exceptions of an
         /// <see cref="AggregateException"/>:
         /// <code>
-        ///     var allExceptions = Traverse.DepthFirst((Exception)new AggregateException(), e => (e as AggregateException)?.InnerExceptions ?? Enumerable.Empty<Exception>());
+        ///     var allExceptions = Traverse.DepthFirst((Exception)new AggregateException(), e => (e as AggregateException)?.InnerExceptions ?? Enumerable.Empty&lt;Exception&gt;());
         /// </code>
         /// </summary>
         public static IEnumerable<T> DepthFirst<T>(T root, Func<T, IEnumerable<T>> children)

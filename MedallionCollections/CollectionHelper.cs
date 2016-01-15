@@ -8,6 +8,9 @@ using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
+    /// <summary>
+    /// Contains utility and extension methods for working with .NET collections
+    /// </summary>
     public static class CollectionHelper
     {
         #region ---- Partition ----

@@ -15,7 +15,7 @@ namespace Medallion.Collections
         #region ---- Func Comparer ----
         /// <summary>
         /// Creates an <see cref="EqualityComparer{T}"/> using the given <paramref name="equals"/> function
-        /// for equality and the optional <paramref name="hash"/> function for hashing (if <param name="hash"> is not
+        /// for equality and the optional <paramref name="hash"/> function for hashing (if <paramref name="hash"/> is not
         /// provided, all values hash to 0). Note that null values are handled directly by the comparer and will not
         /// be passed to these functions
         /// </summary>
@@ -75,7 +75,7 @@ namespace Medallion.Collections
         /// <summary>
         /// Creates an <see cref="EqualityComparer{T}"/> which compares elements of type <typeparamref name="T"/> by projecting
         /// them to an instance of type <typeparamref name="TKey"/> using the provided <paramref name="keySelector"/> and comparing/hashing
-        /// these keys. The optional <param name="keyComparer"/> argument can be used to specify how the keys are compared. Note that null
+        /// these keys. The optional <paramref name="keyComparer"/> argument can be used to specify how the keys are compared. Note that null
         /// values are handled directly by the comparer and will not be passed to <paramref name="keySelector"/>
         /// </summary>
         public static EqualityComparer<T> Create<T, TKey>(Func<T, TKey> keySelector, IEqualityComparer<TKey> keyComparer = null)
