@@ -191,7 +191,7 @@ namespace Medallion.Collections
         {
             return new ComparisonResult
             {
-                CollectionEqualsResult = Profile(a, b, Enumerables.CollectionEquals),
+                CollectionEqualsResult = Profile(a, b, CollectionHelper.CollectionEquals),
                 DictionaryMethodResult = Profile(a, b, DictionaryBasedEquals),
                 //SortMethodResult = Profile(a, b, SortBasedEquals),
             };

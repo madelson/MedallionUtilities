@@ -159,7 +159,7 @@ namespace Medallion.Collections
         #region ---- Collection Comparer ----
         /// <summary>
         /// Gets an <see cref="EqualityComparer{T}"/> that compares instances of <see cref="IEnumerable{TElement}"/> as
-        /// if with <see cref="Enumerables.CollectionEquals{TElement}(IEnumerable{TElement}, IEnumerable{TElement}, IEqualityComparer{TElement})"/>.
+        /// if with <see cref="CollectionHelper.CollectionEquals{TElement}(IEnumerable{TElement}, IEnumerable{TElement}, IEqualityComparer{TElement})"/>.
         /// The optional <paramref name="elementComparer"/> can be used to override the comparison of individual elements
         /// </summary>
         public static EqualityComparer<IEnumerable<TElement>> GetCollectionComparer<TElement>(IEqualityComparer<TElement> elementComparer = null)

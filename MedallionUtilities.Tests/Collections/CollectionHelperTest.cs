@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Medallion.Collections
 {
-    public class EnumerablesTest
+    public class CollectionHelperTest
     {
         [Fact]
         public void TestPartition()
@@ -52,6 +52,18 @@ namespace Medallion.Collections
 
             new[] { 1, 2, 3, 2, 1 }.MinBy(i => 2 * i, Comparers.Reverse<int>()).ShouldEqual(3);
             new[] { 3, 2, 1, 2, 3 }.MaxBy(i => 2 * i, Comparers.Reverse<int>()).ShouldEqual(1);
+        }
+
+        [Fact]
+        public void TestGetOrAdd()
+        {
+            Assert.Throws<ArgumentNullException>(() => default(Dictionary<int, string>).GetOrAdd(1, i => i.ToString()));
+            Assert.Throws<ArgumentNullException>(() => new Dictionary<int, int>().GetOrAdd(1, null));
+
+            var dictionary = new Dictionary<int, string>();
+            dictionary.GetOrAdd(1, i => i.ToString()).ShouldEqual("1");
+            dictionary.GetOrAdd(1, i => null).ShouldEqual("1");
+            dictionary.GetOrAdd(2, i => null).ShouldEqual(null);
         }
     }
 }

@@ -41,7 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CollectionBase.cs" />
-    <Compile Include="Enumerables.cs" />
+    <Compile Include="CollectionHelper.cs" />
     <Compile Include="Comparers.cs" />
     <Compile Include="DictionaryBase.cs" />
     <Compile Include="Empty.cs" />

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
-    public static class Enumerables
+    public static class CollectionHelper
     {
         #region ---- Partition ----
         /// <summary>
@@ -703,7 +703,30 @@ namespace Medallion.Collections
             }
         }
         #endregion
-        
+
+        #region ---- GetOrAdd ----
+        /// <summary>
+        /// If <paramref name="key"/> exists in <paramref name="dictionary"/>, returns the associated value. Otherwise,
+        /// generates a new value by applying <paramref name="valueFactory"/> to the given <paramref name="key"/>. The 
+        /// new value is stored in <paramref name="dictionary"/> and returned
+        /// </summary>
+        public static TValue GetOrAdd<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, Func<TKey, TValue> valueFactory)
+        {
+            if (dictionary == null) { throw new ArgumentNullException(nameof(dictionary)); }
+            if (valueFactory == null) { throw new ArgumentNullException(nameof(valueFactory)); }
+
+            TValue existing;
+            if (dictionary.TryGetValue(key, out existing))
+            {
+                return existing;
+            }
+
+            var value = valueFactory(key);
+            dictionary.Add(key, value);
+            return value;
+        }
+        #endregion
+
         private static bool TryFastCount<T>(IEnumerable<T> @this, out int count)
         {
             var collection = @this as ICollection<T>;
