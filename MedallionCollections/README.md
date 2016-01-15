@@ -3,6 +3,8 @@
 
 MedallionCollections is a lightweight library containing common utilities for working with .NET collections and enumerables. While there are countless potential such utility methods, I've intentionally tried to limit this package to a bare minimum set that I have personally found to be useful time and again over numerous projects.
 
+Download the [NuGet package](https://www.nuget.org/packages/MedallionCollections)
+
 ## Collection Equality
 
 The `CollectionEquals` extension provides a tuned implementation of [this method](http://www.codeducky.org/engineering-a-collection-equality-function/) for comparing two IEnumerables for equality without regard for order.
