@@ -44,6 +44,8 @@ namespace Medallion.Tools
                 .Where(d => d.FilePath.StartsWith(Path.GetDirectoryName(this.project.FilePath), StringComparison.OrdinalIgnoreCase));
             var syntaxRoots = cSharpFiles.Select(this.RewriteDocumentSyntax)
                 .Cast<CompilationUnitSyntax>()
+                // ignore files without at least one namespace
+                .Where(n => n.Members.Any())
                 .ToArray();
             var merged = DocumentMerger.Merge(syntaxRoots);
 
