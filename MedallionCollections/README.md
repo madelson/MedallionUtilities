@@ -36,7 +36,7 @@ Enumerable.Range(0, 10000)
 
 The `Comparers` and `EqualityComparers` clases contains static factory methods which make it easy to spin up custom `IComparer<T>` and `IEqualityComparer<T>` implementations.
 
-```
+```C#
 // create an EqualityComparer based on equals and hash functions
 EqualityComparers.Create<string>((a, b) => a.Length == b.Length, hash: s => s.Length);
 
@@ -65,10 +65,52 @@ Comparer.Create((Customer c) => c.Name)
 Comparer.GetSequenceComparer<int>()
 ```
 
-- collection equality
-- append
-- comparers
-- traverse
-- getoradd
-- partition
-- empty
+## Traverse
+
+The `Traverse` class contains utility methods for iterating over implicit DAGs. These methods often allow recursive algorithms to be written concisely inline. For example:
+
+```C#
+Exception ex = ...
+// get the innermost exception for an exception
+Traverse.Along(ex, e => e.InnerException).Last();
+
+// find any OperationCanceledExceptions in an AggregateException
+// note that you can also specify breadth-first search
+AggregateException ex = ...
+Traverse.DepthFirst(
+	   (Exception)ex, 
+		e => (e as AggregateException)?.InnerExceptions 
+			?? Enumerable.Empty<Exception>()
+	)
+	.OfType<OperationCanceledException>()
+```
+
+## GetOrAdd
+
+The simple `GetOrAdd` extension of `IDictionary<TKey, TValue>` makes it easy to use any dictionary like a cache (much like the [method](https://msdn.microsoft.com/en-us/library/ee378677(v=vs.110).aspx) in `ConcurrentDictionary<TKey, TValue>`).
+
+```C#
+// memoize a function
+Func<int, int> toBeMemoized = ...
+var cache = new Dictionary<int, int>();
+Func<int, int> memoized = i => dictionary.GetOrAdd(i, toBeMemoized);
+```
+
+## Partition
+
+`Partition` lazily splits a sequence into equal-sized chunks.
+
+```C#
+// returns [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9]]
+Enumerable.Range(0, 10).Partition(3)
+```
+
+## Empty
+
+The `Empty` class contains static, cached, immutable implementations of all generic and non-generic collection interfaces. Under the hood these are implemented by a specialized implementation with minimal overhead. For example, GetEnumerator() does not require allocation.
+
+```C#
+Empty.Dictionary<string, object>().ContainsKey("foo") // false
+```
+
+Something else you'd like to see here? Let me know!
