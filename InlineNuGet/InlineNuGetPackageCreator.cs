@@ -29,7 +29,7 @@ namespace Medallion.Tools
             this.tempWorkspace.Create();
         }
 
-        public static List<string> Create(string projectFilePath, string nuspec, string outputDirectory)
+        public static string Create(string projectFilePath, string nuspec, string outputDirectory)
         {
             using (var creator = new InlineNuGetPackageCreator(projectFilePath, nuspec, outputDirectory))
             {
@@ -37,7 +37,7 @@ namespace Medallion.Tools
             } 
         }
 
-        private List<string> Create()
+        private string Create()
         {
             var codeFile = Path.Combine(this.tempWorkspace.FullName, Path.GetFileNameWithoutExtension(this.project.FilePath) + ".cs.pp");
 
@@ -68,20 +68,16 @@ namespace Medallion.Tools
 
             Console.WriteLine($"Code written to {codeFile}");
 
-            var packCommand = Command.Run("NuGet.exe", new[] { "pack", tempNuspecPath, "-Symbols" }, options: o => o.ThrowOnError().WorkingDirectory(this.tempWorkspace.FullName));
+            var packCommand = Command.Run("NuGet.exe", new[] { "pack", tempNuspecPath }, options: o => o.ThrowOnError().WorkingDirectory(this.tempWorkspace.FullName));
             packCommand.StandardOutput.PipeToAsync(Console.Out);
             packCommand.StandardError.PipeToAsync(Console.Error);
             packCommand.Wait();
 
-            var outputFiles = new List<string>();
-            foreach (var packageFile in this.tempWorkspace.GetFiles("*.nupkg"))
-            {
-                var outputFile = Path.Combine(this.outputDirectory, Path.GetFileName(packageFile.FullName));
-                File.Delete(outputFile);
-                packageFile.MoveTo(outputFile);
-                outputFiles.Add(outputFile);
-            }
-            return outputFiles;
+            var package = this.tempWorkspace.GetFiles("*.nupkg").Single();
+            var outputFile = Path.Combine(this.outputDirectory, Path.GetFileName(package.FullName));
+            File.Delete(outputFile);
+            package.MoveTo(outputFile);
+            return outputFile;
         }
 
         private SyntaxNode RewriteDocumentSyntax(Document document)

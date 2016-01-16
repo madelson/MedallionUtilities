@@ -29,7 +29,7 @@ namespace Medallion.Tools
                 Console.WriteLine($"Using project file {projectFile}");
 
                 var packed = InlineNuGetPackageCreator.Create(projectFilePath: projectFile, nuspec: nuspec, outputDirectory: Environment.CurrentDirectory);
-                Console.WriteLine($"Created {string.Join(", ", packed)}");
+                Console.WriteLine($"Created {packed}");
             }
             catch (Exception ex)
             {
