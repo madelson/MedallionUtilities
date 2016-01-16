@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Medallion.Collections
 {
@@ -198,7 +196,8 @@ namespace Medallion.Collections
                     return false;
                 }
 
-                return x.CollectionEquals(y, this.elementComparer);
+                // avoid calling as extension to support DISABLE_EXTENSIONs in the Inline package
+                return CollectionHelper.CollectionEquals(x, y, this.elementComparer);
             }
 
             public override int GetHashCode(IEnumerable<TElement> obj)

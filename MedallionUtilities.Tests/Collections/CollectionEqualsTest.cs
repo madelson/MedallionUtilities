@@ -22,6 +22,13 @@ namespace Medallion.Collections
         }
 
         [Fact]
+        public void TestBadArguments()
+        {
+            Assert.Throws<ArgumentNullException>(() => default(IEnumerable<int>).CollectionEquals(new[] { 1 }));
+            Assert.Throws<ArgumentNullException>(() => new[] { 1 }.CollectionEquals(null));
+        }
+
+        [Fact]
         public void TestEqualSequences()
         {
             new[] { 1, 2, 3 }.CollectionEquals(new[] { 1, 2, 3 }).ShouldEqual(true);
