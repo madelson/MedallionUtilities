@@ -365,8 +365,8 @@ namespace Medallion.Collections
         /// </summary>
         public static bool CollectionEquals<TElement>(this IEnumerable<TElement> @this, IEnumerable<TElement> that, IEqualityComparer<TElement> comparer = null)
         {
-            Throw.IfNull(@this, "this");
-            Throw.IfNull(that, "that");
+            if (@this == null) { throw new ArgumentNullException(nameof(@this)); }
+            if (that == null) { throw new ArgumentNullException(nameof(that)); }
 
             // FastCount optimization: If both of the collections are materialized and have counts, 
             // we can exit very quickly if those counts differ

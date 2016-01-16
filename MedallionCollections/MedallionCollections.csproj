@@ -56,12 +56,6 @@
     <Compile Include="Traverse.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ThrowIf\ThrowIf.csproj">
-      <Project>{694e7988-8e5b-407f-933e-867760941996}</Project>
-      <Name>ThrowIf</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="MedallionCollections.nuspec" />
     <None Include="README.md" />
   </ItemGroup>
