@@ -5,7 +5,7 @@ MedallionCollections is a lightweight library containing common utilities for wo
 
 Download the [NuGet package](https://www.nuget.org/packages/MedallionCollections)
 
-Want to use these functions but don't want an external dependency? Download the inline [NuGet package](https://www.nuget.org/packages/MedallionCollections.Inline/)
+Want to use these functions but don't want an external dependency? Download the [inline NuGet package](https://www.nuget.org/packages/MedallionCollections.Inline/). For more about inline NuGet packages, check out [this post](http://www.codeducky.org/inline-nuget-packages-a-solution-to-the-problem-of-utility-libraries/).
 
 ## Collection Equality
 
