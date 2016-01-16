@@ -98,6 +98,7 @@
   <ItemGroup>
     <Compile Include="CSharp6SyntaxRewriter.cs" />
     <Compile Include="DocumentMerger.cs" />
+    <Compile Include="HeaderCommentGenerator.cs" />
     <Compile Include="NullGuardRewriter.cs" />
     <Compile Include="InlineNuGetPackageCreator.cs" />
     <Compile Include="NuspecUpdater.cs" />

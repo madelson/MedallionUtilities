@@ -2,6 +2,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.MSBuild;
 using System;
 using System.Collections.Generic;
@@ -28,7 +29,7 @@ namespace Medallion.Tools
             this.tempWorkspace.Create();
         }
 
-        public static string Create(string projectFilePath, string nuspec, string outputDirectory)
+        public static List<string> Create(string projectFilePath, string nuspec, string outputDirectory)
         {
             using (var creator = new InlineNuGetPackageCreator(projectFilePath, nuspec, outputDirectory))
             {
@@ -36,8 +37,16 @@ namespace Medallion.Tools
             } 
         }
 
-        private string Create()
+        private List<string> Create()
         {
+            var codeFile = Path.Combine(this.tempWorkspace.FullName, Path.GetFileNameWithoutExtension(this.project.FilePath) + ".cs.pp");
+
+            var updatedNuspec = NuspecUpdater.RewriteNuspec(this.nuspec, this.project, codeFile);
+            var tempNuspecPath = Path.Combine(this.tempWorkspace.FullName, Path.GetFileName(nuspec));
+            File.WriteAllText(tempNuspecPath, updatedNuspec);
+
+            Console.WriteLine($"Nuspec written to {tempNuspecPath}");
+
             var cSharpFiles = this.project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular)
                 .Where(d => d.Name != "AssemblyInfo.cs")
                 // eliminate the weird auto-generated assembly attributes file
@@ -47,32 +56,32 @@ namespace Medallion.Tools
                 // ignore files without at least one namespace
                 .Where(n => n.Members.Any())
                 .ToArray();
-            var merged = DocumentMerger.Merge(syntaxRoots);
 
-            var codeFile = Path.Combine(this.tempWorkspace.FullName, Path.GetFileNameWithoutExtension(this.project.FilePath) + ".cs.pp");
+            var merged = DocumentMerger.Merge(syntaxRoots);
+            var commented = HeaderCommentGenerator.AddHeaderComment(merged, nuspec: tempNuspecPath);
+            var formatted = Formatter.Format(commented, new AdhocWorkspace());
+
             using (var writer = new StreamWriter(codeFile))
             {
-                merged.WriteTo(writer);
+                formatted.WriteTo(writer);
             }
 
             Console.WriteLine($"Code written to {codeFile}");
 
-            var updatedNuspec = NuspecUpdater.RewriteNuspec(this.nuspec, this.project, codeFile);
-            var tempNuspecPath = Path.Combine(this.tempWorkspace.FullName, Path.GetFileName(nuspec));
-            File.WriteAllText(tempNuspecPath, updatedNuspec);
-
-            Console.WriteLine($"Nuspec written to {tempNuspecPath}");
-
-            var packCommand = Command.Run("NuGet.exe", new[] { "pack", tempNuspecPath }, options: o => o.ThrowOnError().WorkingDirectory(this.tempWorkspace.FullName));
+            var packCommand = Command.Run("NuGet.exe", new[] { "pack", tempNuspecPath, "-Symbols" }, options: o => o.ThrowOnError().WorkingDirectory(this.tempWorkspace.FullName));
             packCommand.StandardOutput.PipeToAsync(Console.Out);
             packCommand.StandardError.PipeToAsync(Console.Error);
             packCommand.Wait();
 
-            var package = this.tempWorkspace.GetFiles("*.nupkg").Single();
-            var outputFile = Path.Combine(this.outputDirectory, Path.GetFileName(package.FullName));
-            File.Delete(outputFile);
-            package.MoveTo(outputFile);
-            return outputFile;
+            var outputFiles = new List<string>();
+            foreach (var packageFile in this.tempWorkspace.GetFiles("*.nupkg"))
+            {
+                var outputFile = Path.Combine(this.outputDirectory, Path.GetFileName(packageFile.FullName));
+                File.Delete(outputFile);
+                packageFile.MoveTo(outputFile);
+                outputFiles.Add(outputFile);
+            }
+            return outputFiles;
         }
 
         private SyntaxNode RewriteDocumentSyntax(Document document)

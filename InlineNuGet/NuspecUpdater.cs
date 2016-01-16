@@ -20,13 +20,37 @@ namespace Medallion.Tools
             
             var parsed = XDocument.Parse(substituted);
 
+            // update id
             var idElement = parsed.Descendants("id").Single();
             idElement.SetValue(idElement.Value + ".Inline");
 
+            // update dev dependency
+            XElement developmentDependencyElement;
+            var existingDevelopmentDependencyElement = parsed.Descendants("developmentDependency").SingleOrDefault();
+            if (existingDevelopmentDependencyElement != null)
+            {
+                developmentDependencyElement = existingDevelopmentDependencyElement;
+            }
+            else
+            {
+                developmentDependencyElement = new XElement("developmentDependency");
+                parsed.Descendants("metadata").Single().Add(developmentDependencyElement);
+            }
+            developmentDependencyElement.SetValue("true");
+
+            // update files
             XElement filesElement;
             var existingFilesElement = parsed.Element("package").Element("files");
             if (existingFilesElement != null)
             {
+                var docXmlElement = existingFilesElement.Elements("file")
+                    .FirstOrDefault(f => StringComparer.OrdinalIgnoreCase.Equals(Path.GetFileName(f.Attribute("src").Value), Path.GetFileNameWithoutExtension(project.FilePath) + ".xml"));
+                if (docXmlElement != null)
+                {
+                    docXmlElement.Remove();
+                    Console.WriteLine($"Removed reference to {docXmlElement.Attribute("src").Value}");
+                }
+
                 filesElement = existingFilesElement;
             }
             else

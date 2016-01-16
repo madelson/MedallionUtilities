@@ -23,11 +23,19 @@ namespace Medallion.Tools
                 {
                     throw new FileNotFoundException("No nuspec file found");
                 }
+                Console.WriteLine($"Using nuspec {nuspec}");
 
                 var projectFile = Directory.GetFiles(Path.GetDirectoryName(nuspec), "*.*proj").Single();
+                Console.WriteLine($"Using project file {projectFile}");
 
                 var packed = InlineNuGetPackageCreator.Create(projectFilePath: projectFile, nuspec: nuspec, outputDirectory: Environment.CurrentDirectory);
-                Console.WriteLine($"Created {packed}");
+                Console.WriteLine($"Created {string.Join(", ", packed)}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("==== AN ERROR OCCURRED ====");
+                Console.WriteLine(ex);
+                Console.WriteLine("===========================");
             }
             finally
             {
