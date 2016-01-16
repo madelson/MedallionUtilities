@@ -4,6 +4,7 @@
 MedallionCollections is a lightweight library containing common utilities for working with .NET collections and enumerables. While there are countless potential such utility methods, I've intentionally tried to limit this package to a bare minimum set that I have personally found to be useful time and again over numerous projects.
 
 Download the [NuGet package](https://www.nuget.org/packages/MedallionCollections)
+Want to use these functions but don't want an external dependency? Download the inline [NuGet package](https://www.nuget.org/packages/MedallionCollections.Inline/)
 
 ## Collection Equality
 
