@@ -14,54 +14,39 @@ namespace Medallion.IO
 {
     public abstract class StreamBase : Stream
     {
-        [Flags]
-        protected enum StreamCapabilities
-        {
-            None = 0,
-            Read = 1 << 0,
-            AsyncRead = 1 << 1,
-            Write = 1 << 2,
-            AsyncWrite = 1 << 3,
-            GetPosition = 1 << 4,
-            GetLength = 1 << 5,
-            Seek = GetPosition | GetLength | 1 << 6,
-            Timeout = 1 << 7,
-        }
-
         private StreamCapabilities capabilities;
         private byte[] cachedSingleByteBuffer;
 
         protected StreamBase(StreamCapabilities capabilities)
         {
+            VerifyCapabilities(this.GetType(), capabilities);
             this.capabilities = capabilities;
-            this.VerifyCapabilities();
+        }
+
+        protected StreamBase(StreamCapabilities currentCapabilities, StreamCapabilities typeCapabilities)
+        {
+            if (currentCapabilities.Except(typeCapabilities) != StreamCapabilities.None)
+            {
+                throw new ArgumentException(nameof(currentCapabilities) + " may not exceed " + nameof(typeCapabilities));
+            }
+            VerifyCapabilities(this.GetType(), typeCapabilities);
+            this.capabilities = currentCapabilities;
         }
 
         #region ---- Capabilities ----
-        public sealed override bool CanRead => (this.capabilities & (StreamCapabilities.Read | StreamCapabilities.AsyncRead)) != StreamCapabilities.None;
+        public sealed override bool CanRead => this.capabilities.CanRead;
 
-        public sealed override bool CanSeek => (this.capabilities & StreamCapabilities.Seek) == StreamCapabilities.Seek;
+        public sealed override bool CanSeek => this.capabilities.CanSeek;
 
-        public sealed override bool CanTimeout => (this.capabilities & StreamCapabilities.Timeout) != StreamCapabilities.None;
+        public sealed override bool CanTimeout => this.capabilities.CanTimeout;
 
-        public sealed override bool CanWrite => (this.capabilities & (StreamCapabilities.Write | StreamCapabilities.AsyncWrite)) != StreamCapabilities.None;
+        public sealed override bool CanWrite => this.capabilities.CanWrite;
         #endregion
 
         #region ---- Read Methods ----
         protected virtual int InternalRead(byte[] buffer, int offset, int count)
         {
-            try
-            {
-                return this.InternalReadAsync(buffer, offset, count, CancellationToken.None).Result;
-            }
-            catch (AggregateException ex)
-            {
-                if (ex.InnerExceptions.Count == 1)
-                {
-                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-                }
-                throw;
-            }
+            return GetResultAndUnwrapException(this.InternalReadAsync(buffer, offset, count, CancellationToken.None));
         }
 
         protected virtual Task<int> InternalReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -81,22 +66,16 @@ namespace Medallion.IO
 
         public sealed override int Read(byte[] buffer, int offset, int count)
         {
+            this.RequireReadable();
             ValidateBuffer(buffer, offset, count);
-            if (!this.canRead)
-            {
-                throw Throw.NotSupported(CannotRead);
-            }
 
             return this.InternalRead(buffer, offset, count);
         }
 
         public sealed override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            this.RequireReadable();
             ValidateBuffer(buffer, offset, count);
-            if (!this.canRead)
-            {
-                throw Throw.NotSupported(CannotRead);
-            }
             
             if (cancellationToken.IsCancellationRequested)
             {
@@ -110,6 +89,8 @@ namespace Medallion.IO
 
         public sealed override int ReadByte()
         {
+            this.RequireReadable();
+
             var cachedSingleByteBuffer = Interlocked.Exchange(ref this.cachedSingleByteBuffer, null);
             var singleByteBuffer = cachedSingleByteBuffer ?? new byte[1];
 
@@ -136,29 +117,18 @@ namespace Medallion.IO
 
         public sealed override int EndRead(IAsyncResult asyncResult)
         {
-            Throw.IfNull(asyncResult, nameof(asyncResult));
+            if (asyncResult == null) { throw new ArgumentNullException(nameof(asyncResult)); }
             var readResult = asyncResult as AsyncReadWriteResult<Task<int>>;
-            Throw.If(readResult == null || readResult.Stream != this, nameof(asyncResult), "must be created by this stream's BeginRead method");
+            if (readResult == null || readResult.Stream != this) { throw new ArgumentException("must be created by this stream's BeginRead method", nameof(asyncResult)); }
 
-            return readResult.Task.Result;
+            return GetResultAndUnwrapException(readResult.Task);
         }
         #endregion
 
         #region ---- Write Methods ----
         protected virtual void InternalWrite(byte[] buffer, int offset, int count)
         {
-            try
-            {
-                this.InternalWriteAsync(buffer, offset, count, CancellationToken.None).Wait();
-            }
-            catch (AggregateException ex)
-            {
-                if (ex.InnerExceptions.Count == 1)
-                {
-                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-                }
-                throw;
-            }
+            WaitAndUnwrapException(this.InternalWriteAsync(buffer, offset, count, CancellationToken.None));
         }
 
         protected virtual Task InternalWriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -179,18 +149,7 @@ namespace Medallion.IO
 
         protected virtual void InternalFlush()
         {
-            try
-            {
-                this.InternalFlushAsync(CancellationToken.None).Wait();
-            }
-            catch (AggregateException ex)
-            {
-                if (ex.InnerExceptions.Count == 1)
-                {
-                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-                }
-                throw;
-            }
+            WaitAndUnwrapException(this.InternalFlushAsync(CancellationToken.None));
         }
 
         protected virtual Task InternalFlushAsync(CancellationToken cancellationToken)
@@ -211,19 +170,16 @@ namespace Medallion.IO
         
         public sealed override void Write(byte[] buffer, int offset, int count)
         {
+            this.RequireWritable();
             ValidateBuffer(buffer, offset, count);
-            if (!this.CanWrite) { throw Throw.NotSupported(CannotWrite); }
 
             this.InternalWrite(buffer, offset, count);
         }
 
         public sealed override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            this.RequireWritable();
             ValidateBuffer(buffer, offset, count);
-            if (!this.canWrite)
-            {
-                throw Throw.NotSupported(CannotWrite);
-            }
 
             if (cancellationToken.IsCancellationRequested)
             {
@@ -237,6 +193,8 @@ namespace Medallion.IO
 
         public sealed override void WriteByte(byte value)
         {
+            this.RequireWritable();
+
             var cachedSingleByteBuffer = Interlocked.Exchange(ref this.cachedSingleByteBuffer, null);
             var singleByteBuffer = cachedSingleByteBuffer ?? new byte[1];
 
@@ -265,25 +223,19 @@ namespace Medallion.IO
             var writeResult = asyncResult as AsyncReadWriteResult<Task>;
             Throw.If(writeResult == null || writeResult.Stream != this, nameof(asyncResult), "must be created by this stream's BeginWrite method");
 
-            writeResult.Task.Wait();
+            WaitAndUnwrapException(writeResult.Task);
         }
 
         public sealed override void Flush()
         {
-            if (!this.canWrite)
-            {
-                throw Throw.NotSupported(CannotWrite);
-            }
+            this.RequireWritable();
 
             this.InternalFlush();
         }
 
         public sealed override Task FlushAsync(CancellationToken cancellationToken)
         {
-            if (!this.canWrite)
-            {
-                throw Throw.NotSupported(CannotWrite);
-            }
+            this.RequireWritable();
 
             if (cancellationToken.IsCancellationRequested)
             {
@@ -297,66 +249,48 @@ namespace Medallion.IO
         #endregion
 
         #region ---- Seek Methods ----
-        protected virtual long InternalLength
-        {
-            get { throw Throw.NotSupported(); }
-            set { throw Throw.NotSupported(); }
-        }
+        protected virtual long InternalGetLength() { throw new NotSupportedException(nameof(InternalGetLength)); }
+        protected virtual void InternalSetLength(long value) { throw new NotSupportedException(nameof(InternalSetLength)); }
 
-        protected virtual long InternalPosition
-        {
-            get { throw Throw.NotSupported(); }
-            set { throw Throw.NotSupported(); }
-        }
+        protected virtual long InternalGetPosition() { throw new NotSupportedException(nameof(InternalGetPosition)); }
+        protected virtual void InternalSetPosition(long value) { throw new NotSupportedException(nameof(InternalSetPosition)); }
 
         public sealed override long Length
         {
             get
             {
-                if (!this.canSeek)
-                {
-                    throw Throw.NotSupported(CannotSeek);
-                }
-                return this.InternalLength;
+                if (!this.capabilities.CanGetLength) { throw new NotSupportedException(nameof(Length)); }
+                return this.InternalGetLength();
             }
         }
 
         public sealed override void SetLength(long value)
         {
-            if (!this.CanWrite) { throw Throw.NotSupported(CannotWrite); }
-            if (!this.CanSeek) { throw Throw.NotSupported(CannotSeek); }
-            Throw.IfOutOfRange(value, nameof(value), min: 0);
-            
-            this.InternalLength = value;
+            this.RequireWritable();
+            this.RequireSeekable();
+            if (value < 0) { throw new ArgumentOutOfRangeException(nameof(value), value, "must be non-negative"); }
+
+            this.InternalSetLength(value);
         }
 
         public sealed override long Position
         {
             get
             {
-                if (!this.canSeek)
-                {
-                    throw Throw.NotSupported(CannotSeek);
-                }
-                return this.InternalPosition;
+                if (!this.capabilities.CanGetPosition) { throw new NotSupportedException(nameof(Position)); }
+                return this.InternalGetPosition();
             }
             set
             {
-                Throw.IfOutOfRange(value, nameof(Position), min: 0);
-                if (!this.canSeek)
-                {
-                    throw Throw.NotSupported(CannotSeek);
-                }
-                this.InternalPosition = value;
+                this.RequireSeekable();
+                if (value < 0) { throw new ArgumentOutOfRangeException(nameof(value), value, "must be non-negative"); }
+                this.InternalSetPosition(value);
             }
         }
 
         public sealed override long Seek(long offset, SeekOrigin origin)
         {
-            if (!this.canSeek)
-            {
-                throw Throw.NotSupported(CannotSeek);
-            }
+            this.RequireSeekable();
 
             long newPosition;
             switch (origin)
@@ -365,10 +299,10 @@ namespace Medallion.IO
                     newPosition = offset;
                     break;
                 case SeekOrigin.Current:
-                    newPosition = CheckedAdd(this.InternalPosition, offset);
+                    newPosition = CheckedAdd(this.InternalGetPosition(), offset);
                     break;
                 case SeekOrigin.End:
-                    newPosition = CheckedAdd(this.InternalLength, offset);
+                    newPosition = CheckedAdd(this.InternalGetPosition(), offset);
                     break;
                 default:
                     throw new ArgumentException($"{nameof(origin)}: invalid origin value '{origin}'");
@@ -379,7 +313,8 @@ namespace Medallion.IO
                 throw new InvalidOperationException($"Seek of {offset} from {origin} would move the position before the beginning of the stream");
             }
 
-            return this.InternalPosition = newPosition;
+            this.InternalSetPosition(newPosition);
+            return newPosition;
         }
 
         private static long CheckedAdd(long position, long offset)
@@ -398,42 +333,30 @@ namespace Medallion.IO
         #region ---- Timeout Methods ----
         protected virtual TimeSpan InternalReadTimeout
         {
-            get { throw Throw.NotSupported(); }
-            set { throw Throw.NotSupported(); }
+            get { throw new NotSupportedException(nameof(InternalReadTimeout)); }
+            set { throw new NotSupportedException(nameof(InternalReadTimeout)); }
         }
 
         protected virtual TimeSpan InternalWriteTimeout
         {
-            get { throw Throw.NotSupported(); }
-            set { throw Throw.NotSupported(); }
+            get { throw new NotSupportedException(nameof(InternalWriteTimeout)); }
+            set { throw new NotSupportedException(nameof(InternalWriteTimeout)); }
         }
 
         public sealed override int ReadTimeout
         {
             get
             {
-                if (!this.canRead)
-                {
-                    throw Throw.NotSupported(CannotRead);
-                }
-                if (!this.canTimeout)
-                {
-                    throw Throw.NotSupported(CannotTimeout);
-                }
+                this.RequireReadable();
+                this.RequireTimeoutable();
 
                 return (int)this.InternalReadTimeout.TotalMilliseconds;
             }
             set
             {
-                Throw.IfOutOfRange(value, nameof(ReadTimeout), min: Timeout.Infinite);
-                if (!this.canRead)
-                {
-                    throw Throw.NotSupported(CannotRead);
-                }
-                if (!this.canTimeout)
-                {
-                    throw Throw.NotSupported(CannotTimeout);
-                }
+                this.RequireReadable();
+                this.RequireTimeoutable();
+                if (value < Timeout.Infinite) { throw new ArgumentOutOfRangeException(nameof(value), value, $"must be infinite ({Timeout.Infinite}) or non-negative"); }
 
                 this.InternalReadTimeout = TimeSpan.FromMilliseconds(value);
             }
@@ -443,35 +366,23 @@ namespace Medallion.IO
         {
             get
             {
-                if (!this.canWrite)
-                {
-                    throw Throw.NotSupported(CannotWrite);
-                }
-                if (!this.canTimeout)
-                {
-                    throw Throw.NotSupported(CannotTimeout);
-                }
+                this.RequireWritable();
+                this.RequireTimeoutable();
 
                 return (int)this.InternalWriteTimeout.TotalMilliseconds;
             }
             set
             {
-                Throw.IfOutOfRange(value, nameof(WriteTimeout), min: Timeout.Infinite);
-                if (!this.canWrite)
-                {
-                    throw Throw.NotSupported(CannotWrite);
-                }
-                if (!this.canTimeout)
-                {
-                    throw Throw.NotSupported(CannotTimeout);
-                }
+                this.RequireWritable();
+                this.RequireTimeoutable();
+                if (value < Timeout.Infinite) { throw new ArgumentOutOfRangeException(nameof(value), value, $"must be infinite ({Timeout.Infinite}) or non-negative"); }
 
                 this.InternalWriteTimeout = TimeSpan.FromMilliseconds(value);
             }
         }
         #endregion
 
-        #region ---- Other Methods ----
+        #region ---- Other Stream Methods ----
         /// <summary>
         /// Sealed because the preferred extension point for cleanup logic is <see cref="Dispose(bool)"/>
         /// </summary>
@@ -483,7 +394,7 @@ namespace Medallion.IO
         protected override void Dispose(bool disposing)
         {
             // this is necessary because CanRead/Write/Seek should return false for a closed stream
-            this.capabilities = (this.capabilities | StreamCapabilities.Timeout);
+            this.capabilities = new StreamCapabilities { CanTimeout = this.CanTimeout };
             base.Dispose(disposing);
         }
 
@@ -499,19 +410,34 @@ namespace Medallion.IO
         #region ---- Argument Validation ----
         private static void ValidateBuffer(byte[] buffer, int offset, int count)
         {
-            Throw.IfNull(buffer, nameof(buffer));
-            Throw.IfOutOfRange(offset, nameof(offset), min: 0);
-            Throw.IfOutOfRange(count, nameof(count), min: 0);
-            Throw.IfOutOfRange(offset + count, nameof(offset) + ", " + nameof(count), max: buffer.Length);
+            if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+            if (offset < 0) { throw new ArgumentOutOfRangeException(nameof(offset), offset, "must be non-negative"); }
+            if (count < 0) { throw new ArgumentOutOfRangeException(nameof(count), count, "must be non-negative"); }
+            if (offset + count > buffer.Length) { throw new ArgumentOutOfRangeException(nameof(offset) + ", " + nameof(count), new { offset, count }, "must refer to a valid segment of " + nameof(buffer)); }
         }
 
-        private const string CannotRead = "The stream does not support reading",
-            CannotWrite = "The stream does not support writing",
-            CannotSeek = "The stream does not support seeking",
-            CannotTimeout = "The stream does not support timeouts";
+        private void RequireReadable()
+        {
+            if (!this.CanRead) { throw new NotSupportedException("The stream does not support reading"); }
+        }
+
+        private void RequireWritable()
+        {
+            if (!this.CanWrite) { throw new NotSupportedException("The stream does not support writing"); }
+        }
+
+        private void RequireSeekable()
+        {
+            if (!this.CanSeek) { throw new NotSupportedException("The stream does not support seeking"); }
+        }
+
+        private void RequireTimeoutable()
+        {
+            if (!this.CanTimeout) { throw new NotSupportedException("The stream does not support timeouts"); }
+        }
         #endregion
 
-        #region ---- IAsyncResult implementation ----
+        #region ---- IAsyncResult Implementation ----
         private sealed class AsyncReadWriteResult<TTask> : IAsyncResult
             where TTask : Task
         {
@@ -528,17 +454,17 @@ namespace Medallion.IO
                 this.stream = stream;
             }
 
-            public TTask Task { get { return this.task; } }
+            public TTask Task => this.task;
 
-            public Stream Stream { get { return this.stream; } }
+            public Stream Stream => this.stream;
 
-            object IAsyncResult.AsyncState { get { return this.state; } }
+            object IAsyncResult.AsyncState => this.state;
 
-            WaitHandle IAsyncResult.AsyncWaitHandle { get { return ((IAsyncResult)this.task).AsyncWaitHandle; } }
+            WaitHandle IAsyncResult.AsyncWaitHandle => ((IAsyncResult)this.task).AsyncWaitHandle;
 
-            bool IAsyncResult.CompletedSynchronously { get { return ((IAsyncResult)this.task).CompletedSynchronously; } }
+            bool IAsyncResult.CompletedSynchronously => ((IAsyncResult)this.task).CompletedSynchronously;
 
-            bool IAsyncResult.IsCompleted { get { return this.task.IsCompleted; } }
+            bool IAsyncResult.IsCompleted => this.task.IsCompleted;
 
             public void InvokeCallback()
             {
@@ -547,23 +473,60 @@ namespace Medallion.IO
         }
         #endregion
 
+        #region ---- Async Helpers ----
+        private static void WaitAndUnwrapException(Task task)
+        {
+            try
+            {
+                task.Wait();
+            }
+            catch (AggregateException ex)
+            {
+                if (ex.InnerExceptions.Count == 1)
+                {
+                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                }
+                throw;
+            }
+        }
+
+        private static TResult GetResultAndUnwrapException<TResult>(Task<TResult> task)
+        {
+            try
+            {
+                return task.Result;
+            }
+            catch (AggregateException ex)
+            {
+                if (ex.InnerExceptions.Count == 1)
+                {
+                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                }
+                throw;
+            }
+        }
+        #endregion
+
         #region ---- Override Verification ----
+        // todo use strings not expressions?
         private static readonly MethodInfo ReadMethod = Method(s => s.InternalRead(null, 0, 0)),
             ReadAsyncMethod = Method(s => s.InternalReadAsync(null, 0, 0, default(CancellationToken))),
             WriteMethod = Method(s => s.InternalWrite(null, 0, 0)),
             WriteAsyncMethod = Method(s => s.InternalWriteAsync(null, 0, 0, default(CancellationToken))),
             FlushMethod = Method(s => s.InternalFlush()),
-            FlushAsyncMethod = Method(s => s.InternalFlushAsync(default(CancellationToken)));
+            FlushAsyncMethod = Method(s => s.InternalFlushAsync(default(CancellationToken))),
+            GetPositionMethod = Method(s => s.InternalGetPosition()),
+            SetPositionMethod = Method(s => s.InternalSetPosition(0)),
+            GetLengthMethod = Method(s => s.InternalGetLength()),
+            SetLengthMethod = Method(s => s.InternalSetLength(0));
 
-        private static readonly PropertyInfo PositionProperty = Property(s => s.InternalPosition),
-            LengthProperty = Property(s => s.InternalLength),
-            ReadTimeoutProperty = Property(s => s.InternalReadTimeout),
+        private static readonly PropertyInfo ReadTimeoutProperty = Property(s => s.InternalReadTimeout),
             WriteTimeoutProperty = Property(s => s.InternalWriteTimeout);
 
         private static readonly HashSet<MethodInfo> OverridableMethods = new HashSet<MethodInfo>
         {
             ReadMethod, ReadAsyncMethod, WriteMethod, WriteAsyncMethod, FlushMethod, FlushAsyncMethod,
-            PositionProperty.GetMethod, PositionProperty.SetMethod, LengthProperty.GetMethod, LengthProperty.SetMethod,
+            GetPositionMethod, SetPositionMethod, GetLengthMethod, SetLengthMethod,
             ReadTimeoutProperty.GetMethod, ReadTimeoutProperty.SetMethod, WriteTimeoutProperty.GetMethod, WriteTimeoutProperty.SetMethod,
         };
 
@@ -572,84 +535,55 @@ namespace Medallion.IO
         private static void VerifyCapabilities(Type streamType, StreamCapabilities capabilities)
         {
             // safe because Hashtable is safe for multiple concurrent readers and one writer
-            if (VerifiedTypeCache.ContainsKey(streamType))
+            var cachedCapabilitiesObj = VerifiedTypeCache[streamType];
+            if (cachedCapabilitiesObj != null)
             {
+                var cachedCapabilities = (StreamCapabilities)cachedCapabilitiesObj;
+                if (cachedCapabilities != capabilities)
+                {
+                    throw new ArgumentException($"{streamType} was previously validated for the following capabilities: {capabilities}. It cannot be revalidated for a different set of capabilities ({capabilities})");
+                }
                 return;
             }
 
             var requiredMethods = new HashSet<MethodInfo>();
-            if ((capabilities & StreamCapabilities.Read) != StreamCapabilities.None) { requiredMethods.Add(ReadMethod); }
-            if ((capabilities & StreamCapabilities.AsyncRead) != StreamCapabilities.None) { requiredMethods.Add(ReadAsyncMethod); }
-            if ((capabilities & StreamCapabilities.Write) != StreamCapabilities.None)
+            if (capabilities.CanSyncRead) { requiredMethods.Add(ReadMethod); }
+            if (capabilities.CanAsyncRead) { requiredMethods.Add(ReadAsyncMethod); }
+            if (capabilities.CanSyncWrite)
             {
                 requiredMethods.Add(WriteMethod);
                 requiredMethods.Add(FlushMethod);
             }
-            if ((capabilities & StreamCapabilities.AsyncWrite) != StreamCapabilities.None)
+            if (capabilities.CanAsyncWrite)
             {
                 requiredMethods.Add(WriteAsyncMethod);
                 requiredMethods.Add(FlushAsyncMethod);
             }
-            if ((capabilities & StreamCapabilities.GetLength) != StreamCapabilities.None)
+            if (capabilities.CanGetLength)
             {
-                requiredMethods.Add(LengthProperty.GetMethod);
+                requiredMethods.Add(GetLengthMethod);
             }
-            if ((capabilities & StreamCapabilities.GetPosition) != StreamCapabilities.None)
+            if (capabilities.CanGetPosition)
             {
-                requiredMethods.Add(PositionProperty.GetMethod);
+                requiredMethods.Add(GetPositionMethod);
             }
-            if ((capabilities & StreamCapabilities.Seek) == StreamCapabilities.Seek)
+            if (capabilities.CanSeek)
             {
-                requiredMethods.Add(LengthProperty.SetMethod);
-                requiredMethods.Add(PositionProperty.SetMethod);
+                requiredMethods.Add(SetLengthMethod);
+                requiredMethods.Add(SetPositionMethod);
             }
-
-            var optionalMethods = new HashSet<MethodInfo>();
-            if (this.canRead)
+            if (capabilities.CanTimeout)
             {
-                if (this.async)
-                {
-                    requiredMethods.Add(ReadAsyncMethod);
-                    optionalMethods.Add(ReadMethod);
-                }
-                else
-                {
-                    requiredMethods.Add(ReadMethod);
-                }
-
-                if (this.canTimeout)
+                if (capabilities.CanRead)
                 {
                     requiredMethods.Add(ReadTimeoutProperty.GetMethod);
                     requiredMethods.Add(ReadTimeoutProperty.SetMethod);
                 }
-            }
-            if (this.canWrite)
-            {
-                if (this.async)
-                {
-                    requiredMethods.Add(WriteAsyncMethod);
-                    optionalMethods.Add(WriteMethod);
-                    requiredMethods.Add(FlushAsyncMethod);
-                    optionalMethods.Add(FlushMethod);
-                }
-                else
-                {
-                    requiredMethods.Add(WriteMethod);
-                    requiredMethods.Add(FlushMethod);
-                }
-
-                if (this.canTimeout)
+                if (capabilities.CanWrite)
                 {
                     requiredMethods.Add(WriteTimeoutProperty.GetMethod);
                     requiredMethods.Add(WriteTimeoutProperty.SetMethod);
                 }
-            }
-            if (this.canSeek)
-            {
-                requiredMethods.Add(PositionProperty.GetMethod);
-                requiredMethods.Add(PositionProperty.SetMethod);
-                requiredMethods.Add(LengthProperty.GetMethod);
-                requiredMethods.Add(LengthProperty.SetMethod);
             }
 
             var potentialOverrides = new HashSet<MethodInfo>(
@@ -663,9 +597,9 @@ namespace Medallion.IO
                 .Where(OverridableMethods.Contains);
             foreach (var method in overrides)
             {
-                if (!requiredMethods.Remove(method) && !optionalMethods.Remove(method))
+                if (!requiredMethods.Remove(method))
                 {
-                    throw new ArgumentException($"{streamType} override of method {method} does not match the provided capabilities");
+                    throw new ArgumentException($"{streamType} override of method {method} does not match the specified capabilities");
                 }
             }
 

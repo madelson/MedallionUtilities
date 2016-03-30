@@ -43,6 +43,7 @@
     <Compile Include="MemoryPipe.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="StreamBase.cs" />
+    <Compile Include="StreamCapabilities.cs" />
     <Compile Include="Streams.cs" />
   </ItemGroup>
   <ItemGroup>
