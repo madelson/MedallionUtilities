@@ -19,35 +19,32 @@ namespace Medallion.IO
         {
             None = 0,
             Read = 1 << 0,
-            Write = 1 << 1,
-            Seek = 1 << 2,
-            Timeout = 1 << 3,
-            Async = 1 << 4,
-            Threadsafe = 1 << 5,
+            AsyncRead = 1 << 1,
+            Write = 1 << 2,
+            AsyncWrite = 1 << 3,
+            GetPosition = 1 << 4,
+            GetLength = 1 << 5,
+            Seek = GetPosition | GetLength | 1 << 6,
+            Timeout = 1 << 7,
         }
 
-        private bool canRead, canWrite, canSeek, canTimeout, async, threadsafe;
+        private StreamCapabilities capabilities;
         private byte[] cachedSingleByteBuffer;
 
         protected StreamBase(StreamCapabilities capabilities)
         {
-            this.canRead = (capabilities & StreamCapabilities.Read) != StreamCapabilities.None;
-            this.canWrite = (capabilities & StreamCapabilities.Write) != StreamCapabilities.None;
-            this.canSeek = (capabilities & StreamCapabilities.Seek) != StreamCapabilities.None;
-            this.canTimeout = (capabilities & StreamCapabilities.Timeout) != StreamCapabilities.None;
-            this.async = (capabilities & StreamCapabilities.Async) != StreamCapabilities.None;
-            this.threadsafe = (capabilities & StreamCapabilities.Threadsafe) != StreamCapabilities.None;
+            this.capabilities = capabilities;
             this.VerifyCapabilities();
         }
 
         #region ---- Capabilities ----
-        public sealed override bool CanRead { get { return this.canRead; } }
+        public sealed override bool CanRead => (this.capabilities & (StreamCapabilities.Read | StreamCapabilities.AsyncRead)) != StreamCapabilities.None;
 
-        public sealed override bool CanSeek { get { return this.canSeek; } }
+        public sealed override bool CanSeek => (this.capabilities & StreamCapabilities.Seek) == StreamCapabilities.Seek;
 
-        public sealed override bool CanTimeout { get { return this.canTimeout; } }
+        public sealed override bool CanTimeout => (this.capabilities & StreamCapabilities.Timeout) != StreamCapabilities.None;
 
-        public sealed override bool CanWrite { get { return this.canWrite; } }
+        public sealed override bool CanWrite => (this.capabilities & (StreamCapabilities.Write | StreamCapabilities.AsyncWrite)) != StreamCapabilities.None;
         #endregion
 
         #region ---- Read Methods ----
@@ -113,23 +110,14 @@ namespace Medallion.IO
 
         public sealed override int ReadByte()
         {
-            var cachedSingleByteBuffer = this.threadsafe
-                ? Interlocked.Exchange(ref this.cachedSingleByteBuffer, null)
-                : this.cachedSingleByteBuffer;
+            var cachedSingleByteBuffer = Interlocked.Exchange(ref this.cachedSingleByteBuffer, null);
             var singleByteBuffer = cachedSingleByteBuffer ?? new byte[1];
 
             var bytesRead = this.InternalRead(singleByteBuffer, offset: 0, count: 1);
             var result = bytesRead == 0 ? -1 : singleByteBuffer[0];
             
-            if (this.threadsafe)
-            {
-                // volatile to prevent re-ordering with our use of the buffer above
-                Volatile.Write(ref this.cachedSingleByteBuffer, singleByteBuffer);
-            }
-            else
-            {
-                this.cachedSingleByteBuffer = singleByteBuffer;
-            }
+            // volatile to prevent re-ordering with our use of the buffer above
+            Volatile.Write(ref this.cachedSingleByteBuffer, singleByteBuffer);
 
             return result;
         }
@@ -224,10 +212,7 @@ namespace Medallion.IO
         public sealed override void Write(byte[] buffer, int offset, int count)
         {
             ValidateBuffer(buffer, offset, count);
-            if (!this.canWrite)
-            {
-                throw Throw.NotSupported(CannotWrite);
-            }
+            if (!this.CanWrite) { throw Throw.NotSupported(CannotWrite); }
 
             this.InternalWrite(buffer, offset, count);
         }
@@ -252,23 +237,14 @@ namespace Medallion.IO
 
         public sealed override void WriteByte(byte value)
         {
-            var cachedSingleByteBuffer = this.threadsafe
-                ? Interlocked.Exchange(ref this.cachedSingleByteBuffer, null)
-                : this.cachedSingleByteBuffer;
+            var cachedSingleByteBuffer = Interlocked.Exchange(ref this.cachedSingleByteBuffer, null);
             var singleByteBuffer = cachedSingleByteBuffer ?? new byte[1];
 
             singleByteBuffer[0] = value;
             this.InternalWrite(singleByteBuffer, offset: 0, count: 1);
             
-            if (this.threadsafe)
-            {
-                // volatile to prevent re-ordering with our use of the buffer above
-                Volatile.Write(ref this.cachedSingleByteBuffer, singleByteBuffer);
-            }
-            else
-            {
-                this.cachedSingleByteBuffer = singleByteBuffer;
-            }
+            // volatile to prevent re-ordering with our use of the buffer above
+            Volatile.Write(ref this.cachedSingleByteBuffer, singleByteBuffer);
         }
 
         public sealed override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
@@ -347,11 +323,10 @@ namespace Medallion.IO
 
         public sealed override void SetLength(long value)
         {
+            if (!this.CanWrite) { throw Throw.NotSupported(CannotWrite); }
+            if (!this.CanSeek) { throw Throw.NotSupported(CannotSeek); }
             Throw.IfOutOfRange(value, nameof(value), min: 0);
-            if (!this.canSeek)
-            {
-                throw Throw.NotSupported(CannotSeek);
-            }
+            
             this.InternalLength = value;
         }
 
@@ -496,13 +471,20 @@ namespace Medallion.IO
         }
         #endregion
 
-        #region ---- Sealed Call Base Methods ----
+        #region ---- Other Methods ----
         /// <summary>
         /// Sealed because the preferred extension point for cleanup logic is <see cref="Dispose(bool)"/>
         /// </summary>
         public sealed override void Close()
         {
             base.Close();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            // this is necessary because CanRead/Write/Seek should return false for a closed stream
+            this.capabilities = (this.capabilities | StreamCapabilities.Timeout);
+            base.Dispose(disposing);
         }
 
         /// <summary>
@@ -587,9 +569,8 @@ namespace Medallion.IO
 
         private static readonly Hashtable VerifiedTypeCache = new Hashtable();
 
-        private void VerifyCapabilities()
+        private static void VerifyCapabilities(Type streamType, StreamCapabilities capabilities)
         {
-            var streamType = this.GetType();
             // safe because Hashtable is safe for multiple concurrent readers and one writer
             if (VerifiedTypeCache.ContainsKey(streamType))
             {
@@ -597,6 +578,32 @@ namespace Medallion.IO
             }
 
             var requiredMethods = new HashSet<MethodInfo>();
+            if ((capabilities & StreamCapabilities.Read) != StreamCapabilities.None) { requiredMethods.Add(ReadMethod); }
+            if ((capabilities & StreamCapabilities.AsyncRead) != StreamCapabilities.None) { requiredMethods.Add(ReadAsyncMethod); }
+            if ((capabilities & StreamCapabilities.Write) != StreamCapabilities.None)
+            {
+                requiredMethods.Add(WriteMethod);
+                requiredMethods.Add(FlushMethod);
+            }
+            if ((capabilities & StreamCapabilities.AsyncWrite) != StreamCapabilities.None)
+            {
+                requiredMethods.Add(WriteAsyncMethod);
+                requiredMethods.Add(FlushAsyncMethod);
+            }
+            if ((capabilities & StreamCapabilities.GetLength) != StreamCapabilities.None)
+            {
+                requiredMethods.Add(LengthProperty.GetMethod);
+            }
+            if ((capabilities & StreamCapabilities.GetPosition) != StreamCapabilities.None)
+            {
+                requiredMethods.Add(PositionProperty.GetMethod);
+            }
+            if ((capabilities & StreamCapabilities.Seek) == StreamCapabilities.Seek)
+            {
+                requiredMethods.Add(LengthProperty.SetMethod);
+                requiredMethods.Add(PositionProperty.SetMethod);
+            }
+
             var optionalMethods = new HashSet<MethodInfo>();
             if (this.canRead)
             {
