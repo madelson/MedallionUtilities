@@ -26,6 +26,11 @@ namespace Medallion.IO
 
         private CapabilityFlags flags;
 
+        public StreamCapabilities(StreamCapabilities capabilities)
+        {
+            this.flags = capabilities.flags;
+        }
+
         public bool CanRead => this.CanSyncRead || this.CanAsyncRead;
 
         public bool CanSyncRead

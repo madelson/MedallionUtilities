@@ -7,25 +7,41 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
+using System.Collections;
 
 namespace Medallion.IO
 {
-    // TODO library name ideas: DreamStream, Flow
+    // TODO library name ideas: DreamStream, Flow (or other synonym e. g. creek)
+
+        // streambase should check capabilities to avoid recursion on internal read/async
+        // streambase should track active async tasks and throw on multiple
+        
+        // should offer version of concat that takes IEnumerable of streams
+        // memory pipe should offer zero buffer option for lazy streaming with handoff
 
     // ideas:
     // streambase, pipe
     // same stuff with readers & writers?
     // other enumerables with binary reader?
     // copyto for reader => writer
+    // lazy stream with async or sync write that consumes as a reader
 
     public static class Streams
     {
+        private static readonly StreamCapabilities ReadCapabilities = new StreamCapabilities
+        {
+            CanAsyncRead = true,
+            CanSyncRead = true,
+            CanTimeout = true,
+            CanSeek = true,
+        };
+
         #region ---- Take ----
         public static Stream Take(this Stream stream, long count, bool leaveOpen = false)
         {
-            Throw.IfNull(stream, nameof(stream));
-            Throw.If(!stream.CanRead, nameof(stream) + " must be readable");
-            Throw.IfOutOfRange(count, nameof(count), min: 0);
+            if (stream == null) { throw new ArgumentNullException(nameof(stream)); }
+            if (!stream.CanRead) { throw new ArgumentException("must be readable", nameof(stream)); }
+            if (count < 0) { throw new ArgumentOutOfRangeException(nameof(count), count, "must be non-negative"); }
 
             return new TakeStream(stream, count, leaveOpen);
         }
@@ -34,13 +50,16 @@ namespace Medallion.IO
         {
             private readonly Stream stream;
             private readonly bool leaveOpen;
+            private readonly long? initialPosition;
+            private readonly long count;
             private long remaining;
 
             public TakeStream(Stream stream, long count, bool leaveOpen)
-                : base(StreamCapabilities.Read | StreamCapabilities.Async)
+                : base(StreamCapabilities.InferFrom(stream).Intersect(ReadCapabilities), ReadCapabilities)
             {
                 this.stream = stream;
-                this.remaining = count;
+                this.count = this.remaining = count;
+                this.initialPosition = stream.CanSeek ? stream.Position : default(long?);
                 this.leaveOpen = leaveOpen;
             }
 
@@ -51,7 +70,7 @@ namespace Medallion.IO
                     return 0; // eof
                 }
 
-                var bytesRead = this.stream.Read(buffer, offset, (int)Math.Min(count, remaining));
+                var bytesRead = this.stream.Read(buffer, offset, (int)Math.Min(count, this.remaining));
                 if (bytesRead == 0)
                 {
                     this.remaining = 0;
@@ -71,7 +90,7 @@ namespace Medallion.IO
                     return 0; // eof
                 }
 
-                var bytesRead = await this.stream.ReadAsync(buffer, offset, (int)Math.Min(count, remaining), cancellationToken).ConfigureAwait(false);
+                var bytesRead = await this.stream.ReadAsync(buffer, offset, (int)Math.Min(count, this.remaining), cancellationToken).ConfigureAwait(false);
                 if (bytesRead == 0)
                 {
                     this.remaining = 0;
@@ -82,6 +101,24 @@ namespace Medallion.IO
                 }
 
                 return bytesRead;
+            }
+
+            protected override long InternalGetLength() => Math.Min(this.count, (this.stream.Length - this.initialPosition.Value));
+
+            protected override long InternalGetPosition() => this.count - this.remaining;
+
+            protected override void InternalSetPosition(long value)
+            {
+                if (value > this.Length) { throw new ArgumentOutOfRangeException(nameof(value), value, $"must be within the stream length ({this.Length})"); }
+
+                this.stream.Position = this.initialPosition.Value + value;
+                this.remaining = this.count - value;
+            }
+
+            protected override TimeSpan InternalReadTimeout
+            {
+                get { return TimeSpan.FromMilliseconds(this.stream.ReadTimeout); }
+                set { this.stream.ReadTimeout = (int)value.TotalMilliseconds; }
             }
 
             protected override void Dispose(bool disposing)
@@ -98,10 +135,10 @@ namespace Medallion.IO
         #region ---- Concat ----
         public static Stream Concat(this Stream first, Stream second)
         {
-            Throw.IfNull(first, nameof(first));
-            Throw.IfNull(second, nameof(second));
-            Throw.If(!first.CanRead, nameof(first), "must be readable");
-            Throw.If(!second.CanRead, nameof(second), "must be readable");
+            if (first == null) { throw new ArgumentNullException(nameof(first)); }
+            if (second == null) { throw new ArgumentNullException(nameof(second)); }
+            if (!first.CanRead) { throw new ArgumentException("must be readable", nameof(first)); }
+            if (!second.CanRead) { throw new ArgumentException("must be readable", nameof(second)); }
 
             return new ConcatStream(first, second);
         }
@@ -113,7 +150,7 @@ namespace Medallion.IO
             private int currentStreamIndex;
 
             public ConcatStream(Stream first, Stream second)
-                : base(StreamCapabilities.Read)
+                : base(StreamCapabilities.InferFrom(first).Intersect(StreamCapabilities.InferFrom(second)).Intersect(ReadCapabilities), ReadCapabilities)
             {
                 this.first = first;
                 this.second = second;
@@ -132,6 +169,31 @@ namespace Medallion.IO
 
                     var stream = streams[this.currentStreamIndex];
                     var bytesRead = stream.Read(buffer, offset, count);
+                    if (bytesRead == 0)
+                    {
+                        // done with this stream, move to the next one
+                        ++this.currentStreamIndex;
+                    }
+                    else
+                    {
+                        return bytesRead;
+                    }
+                }
+            }
+
+            protected override async Task<int> InternalReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                var streams = this.GetStreams();
+
+                while (true)
+                {
+                    if (this.currentStreamIndex > streams.Count)
+                    {
+                        return 0;
+                    }
+
+                    var stream = streams[this.currentStreamIndex];
+                    var bytesRead = await stream.ReadAsync(buffer, offset, count).ConfigureAwait(false);
                     if (bytesRead == 0)
                     {
                         // done with this stream, move to the next one
@@ -175,39 +237,113 @@ namespace Medallion.IO
                     collector.Add(stream);
                 }
             }
+
+            protected override long InternalGetLength() => this.GetStreams().Sum(s => s.Length);
+
+            protected override long InternalGetPosition()
+            {
+                var streams = this.GetStreams();
+                return checked(
+                    streams.Take(this.currentStreamIndex).Sum(s => s.Length)
+                        + streams[currentStreamIndex].Position
+                );
+            }
+
+            protected override void InternalSetPosition(long value)
+            {
+                if (value > this.Length) { throw new ArgumentOutOfRangeException(nameof(value), value, $"must be within the stream length ({this.Length})"); }
+
+                var streams = this.GetStreams();
+                var currentPosition = this.Position;
+                while (currentPosition != value)
+                {
+                    var currentStream = streams[this.currentStreamIndex];
+                    var currentStreamPosition = currentStream.Position;
+
+                    if (currentPosition > value)
+                    {
+                        // we need to go backwards so...
+                        if (currentStreamPosition > 0)
+                        {
+                            // ... either move backwards as far as we can/need to within the current stream
+                            var delta = Math.Min((currentPosition - value), currentStreamPosition);
+                            currentStream.Position = currentStreamPosition - delta;
+                            currentPosition -= delta;
+                        }
+                        else
+                        {
+                            // ... or move to the previous stream
+                            --this.currentStreamIndex;
+                        }
+                    }
+                    else
+                    {
+                        // we need to go forwards, so...
+                        var currentStreamLength = currentStream.Length;
+                        if (currentStreamPosition < currentStreamLength)
+                        {
+                            // ... either move forwards as far as we can/need to within the current stream
+                            var delta = Math.Min((value - currentPosition), currentStreamLength - currentStreamPosition);
+                            currentStream.Position = currentStreamPosition + delta;
+                            currentPosition += delta;
+                        }
+                        else
+                        {
+                            // ... or moveto the next stream
+                            ++this.currentStreamIndex;
+                        }
+                    }
+                }
+            }
+
+            protected override TimeSpan InternalReadTimeout
+            {
+                get
+                {
+                    var streams = this.GetStreams();
+                    var firstStreamTimeout = streams[0].ReadTimeout;
+                    if (streams.Skip(1).Any(s => s.ReadTimeout != firstStreamTimeout))
+                    {
+                        throw new InvalidOperationException("The underlying streams have different read timeouts");
+                    }
+                    return TimeSpan.FromMilliseconds(firstStreamTimeout);
+                }
+                set
+                {
+                    var timeoutMillis = (int)value.TotalMilliseconds;
+                    foreach (var stream in this.GetStreams()) { stream.ReadTimeout = timeoutMillis; }
+                }
+            }
         }
         #endregion
 
         #region ---- Byte Enumerables ----
-        public static Stream AsStream(IEnumerable<byte> bytes)
+        public static Stream FromEnumerator(IEnumerator<byte> bytes)
         {
-            Throw.IfNull(bytes, nameof(bytes));
+            if (bytes == null) { throw new ArgumentNullException(nameof(bytes)); }
 
             return new ByteEnumerableStream(bytes);
         }
 
         private sealed class ByteEnumerableStream : StreamBase
         {
-            private readonly IEnumerable<byte> bytes;
-            private IEnumerator<byte> enumerator;
+            private IEnumerator<byte> bytes;
 
-            public ByteEnumerableStream(IEnumerable<byte> bytes)
-                : base(StreamCapabilities.Read)
+            public ByteEnumerableStream(IEnumerator<byte> bytes)
+                : base(new StreamCapabilities { CanSyncRead = true })
             {
                 this.bytes = bytes;
             }
 
             protected override int InternalRead(byte[] buffer, int offset, int count)
             {
-                var enumerator = this.enumerator ?? (this.enumerator = this.bytes.GetEnumerator());
-                
                 for (var bytesRead = 0; bytesRead < count; ++bytesRead)
                 {
-                    if (!enumerator.MoveNext())
+                    if (!this.bytes.MoveNext())
                     {
                         return bytesRead;
                     }
-                    buffer[offset + bytesRead] = enumerator.Current;
+                    buffer[offset + bytesRead] = this.bytes.Current;
                 }
 
                 return count;
@@ -215,16 +351,14 @@ namespace Medallion.IO
 
             protected override void Dispose(bool disposing)
             {
-                if (disposing && this.enumerator != null)
-                {
-                    this.enumerator.Dispose();
-                }
+                if (disposing) { this.bytes.Dispose(); }
             }
         }
 
-        public static IEnumerable<byte> AsEnumerable(this Stream stream, bool leaveOpen = false)
+        public static IEnumerable<byte> EnumerateBytes(this Stream stream, bool leaveOpen = false)
         {
-            Throw.IfNull(stream, nameof(stream));
+            if (stream == null) { throw new ArgumentNullException(nameof(stream)); }
+            if (!stream.CanRead) { throw new ArgumentException("must be readable", nameof(stream)); }
 
             return ByteIterator(stream, leaveOpen);
         }
@@ -246,25 +380,17 @@ namespace Medallion.IO
         }
         #endregion
 
-        #region ---- Replace ----
-        public static Stream Replace(this Stream stream, IReadOnlyList<byte> sequence, IReadOnlyList<byte> replacement, bool leaveOpen = false)
-        {
-        }
-
-        
-        #endregion
-
         #region ---- Random ----
-        public static Stream AsStream(this Random random)
+        public static Stream FromRandom(Random random)
         {
-            Throw.IfNull(random, nameof(random));
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
 
             return new RandomStream(random.NextBytes);
         } 
 
-        public static Stream AsStream(this RandomNumberGenerator randomNumberGenerator)
+        public static Stream FromRandomNumberGenerator(RandomNumberGenerator randomNumberGenerator)
         {
-            Throw.IfNull(randomNumberGenerator, nameof(randomNumberGenerator));
+            if (randomNumberGenerator == null) { throw new ArgumentNullException(nameof(randomNumberGenerator)); }
 
             return new RandomStream(randomNumberGenerator.GetBytes);
         }
@@ -276,7 +402,7 @@ namespace Medallion.IO
             private int bufferSize;
 
             public RandomStream(Action<byte[]> nextBytes)
-                : base(StreamCapabilities.Read)
+                : base(new StreamCapabilities { CanSyncRead = true })
             {
                 this.nextBytes = nextBytes;
             }

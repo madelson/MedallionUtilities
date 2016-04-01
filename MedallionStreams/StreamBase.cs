@@ -569,7 +569,10 @@ namespace Medallion.IO
             }
             if (capabilities.CanSeek)
             {
-                requiredMethods.Add(SetLengthMethod);
+                if (capabilities.CanWrite)
+                {
+                    requiredMethods.Add(SetLengthMethod);
+                }
                 requiredMethods.Add(SetPositionMethod);
             }
             if (capabilities.CanTimeout)
