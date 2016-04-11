@@ -7,29 +7,32 @@ using System.Threading.Tasks;
 // todo namespace change to avoid conflict with SystemRandom
 namespace Medallion.Random
 {
-    using NullGuard;
     using System.IO;
     using System.Security.Cryptography;
     using System.Threading;
     using Random = System.Random;
     
-    // todo probably remove
-    [NullGuard(ValidationFlags.Arguments)]
     public static class Rand
     {
         #region ---- Java Extensions ----
         public static bool NextBoolean(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             return random.NextBits(1) != 0;
         }
 
         public static int NextInt32(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             return random.NextBits(32);
         }
 
         public static long NextInt64(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             var nextBitsRandom = random as NextBitsRandom;
             if (nextBitsRandom != null)
             {
@@ -46,11 +49,15 @@ namespace Medallion.Random
 
         public static float NextSingle(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             return random.NextBits(24) / ((float)(1 << 24));
         }
 
         public static IEnumerable<double> NextDoubles(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             return NextDoublesIterator(random);
         }
 
@@ -83,11 +90,7 @@ namespace Medallion.Random
             var lowerBits = random.Next30OrFewerBits(16);
             return upperBits + lowerBits;
         }
-
-        private static readonly int[] Next30OrFewerBitsRejectThresholds = Enumerable.Range(0, count: 31)
-            .Select(bits => int.MaxValue - (int.MaxValue % (1 << bits)))
-            .ToArray();
-
+        
         private static int Next30OrFewerBits(this Random random, int bits)
         {
             // a range of bits is [0, 2^bits - 1)
@@ -105,35 +108,22 @@ namespace Medallion.Random
             // and we were looking for a number in [0, 4), we'd reject samples of
             // 8 or 9 to ensure that each number in the desired range has an even chance
             // of turning up
-            while (sample - val + maxValue < 0);
+            while (sample - val + (maxValue - 1) < 0);
 
             return val;
-
-            // the simplest underlying call in Random is Next(), which gives us [0, int.MaxValue - 1).
-            // That's not quite 31 bits, but if we discard the lowest bit, we get [0, 2^30), or 30 bits.
-
-            // Note that we'll prefer to discard low bits throughout, since according to 
-            // http://rosettacode.org/wiki/Subtractive_generator the low bits are less random
-
-            //return random.Next() >> (31 - bits);
         }
         #endregion
 
         #region ---- Weighted Coin Flip ----
         public static bool NextBoolean(this Random random, double probability)
         {
-            if (probability == 0)
-            {
-                return false;
-            }
-            if (probability == 1)
-            {
-                return true;
-            }
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
 
+            if (probability == 0) { return false; }
+            if (probability == 1) { return true; }
             if (probability < 0 || probability > 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(probability), $"probability must be in [0, 1]. Found {probability}. ");
+                throw new ArgumentOutOfRangeException(nameof(probability), $"{nameof(probability)} must be in [0, 1]. Found {probability}");
             }
 
             return random.NextDouble() < probability;
@@ -143,6 +133,8 @@ namespace Medallion.Random
         #region ---- Byte Stream ----
         public static IEnumerable<byte> NextBytes(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             return NextBytesIterator(random);
         }
 
@@ -182,9 +174,9 @@ namespace Medallion.Random
                 // of knowing whether the iterator will be processed only on a single thread.
                 // However, for small lists we can avoid creating a new random by doing a non-lazy shuffle
 
-                if (list.Count <= 20)
+                if (list.Count <= 100)
                 {
-                    list.Shuffle(random);
+                    list.Shuffle(ThreadLocalRandom);
                     foreach (var item in list)
                     {
                         yield return item;
@@ -215,6 +207,8 @@ namespace Medallion.Random
 
         public static void Shuffle<T>(this IList<T> list, Random random = null)
         {
+            if (list == null) { throw new ArgumentNullException(nameof(list)); }
+
             var rand = random ?? ThreadLocalRandom;
 
             for (var i = 0; i < list.Count - 1; ++i)
@@ -231,6 +225,8 @@ namespace Medallion.Random
         #region ---- Gaussian ----
         public static double NextGaussian(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             var nextGaussianRandom = random as INextGaussianRandom;
             if (nextGaussianRandom != null)
             {
@@ -244,6 +240,8 @@ namespace Medallion.Random
 
         public static IEnumerable<double> NextGaussians(this Random random)
         {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+
             return NextGaussiansIterator(random);
         }
 
@@ -297,7 +295,6 @@ namespace Medallion.Random
             return ThreadLocalRandom.UnsafeNext(minValue, maxValue);
         }
         
-        // no NullGuard needed since this simply delegates
         private sealed class SafeThreadLocalRandom : Random, INextGaussianRandom
         {
             private readonly Thread thread;
@@ -393,8 +390,6 @@ namespace Medallion.Random
         // TODO look at how java does this
         public static Random Create()
         {
-            var ticks = Environment.TickCount;
-
             var combinedSeed = unchecked((31 * Environment.TickCount) + ThreadLocalRandom.UnsafeNext());
             return new Random(combinedSeed);
         }
@@ -403,10 +398,12 @@ namespace Medallion.Random
         #region ---- System.IO.Stream Interop ----
         public static Random FromStream(Stream randomBytes)
         {
+            if (randomBytes == null) { throw new ArgumentNullException(nameof(randomBytes)); }
+            if (!randomBytes.CanRead) { throw new ArgumentException("must be readable", nameof(randomBytes)); }
+
             return new StreamRandomNumberGenerator(randomBytes).AsRandom();
         }
-
-        [NullGuard(ValidationFlags.Arguments)]
+        
         private sealed class StreamRandomNumberGenerator : RandomNumberGenerator
         {
             private readonly Stream stream;
@@ -453,7 +450,6 @@ namespace Medallion.Random
         #endregion
         
         #region ---- NextBits Random ----
-        [NullGuard(ValidationFlags.Arguments)] // for NextBytes
         private abstract class NextBitsRandom : Random, INextGaussianRandom
         {
             // pass through the seed just in case
@@ -477,7 +473,7 @@ namespace Medallion.Random
                 }
                 if (maxValue <= 0)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(maxValue), $"{nameof(maxValue)} must be positive. ");
+                    throw new ArgumentOutOfRangeException(nameof(maxValue), $"{nameof(maxValue)} must be positive.");
                 }
 
                 unchecked
@@ -541,6 +537,8 @@ namespace Medallion.Random
 
             public override void NextBytes(byte[] buffer)
             {
+                if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+
                 for (int i = 0; i < buffer.Length;)
                 {
                     for (int rand = this.NextBits(32), n = Math.Min(buffer.Length - i, 4);
@@ -623,10 +621,11 @@ namespace Medallion.Random
         #region ---- RandomNumberGenerator Interop ----
         public static Random AsRandom(this RandomNumberGenerator randomNumberGenerator)
         {
+            if (randomNumberGenerator == null) { throw new ArgumentNullException(nameof(randomNumberGenerator)); }
+
             return new RandomNumberGeneratorRandom(randomNumberGenerator);
         }
-
-        [NullGuard(ValidationFlags.Arguments)]
+        
         private sealed class RandomNumberGeneratorRandom : NextBitsRandom
         {
             private const int BufferLength = 512;
@@ -665,6 +664,8 @@ namespace Medallion.Random
             // we override this for performance reasons, since we can call the underlying RNG's NextBytes() method directly
             public override void NextBytes(byte[] buffer)
             {
+                if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+
                 if (buffer.Length <= (BufferLength - this.nextByteIndex))
                 {
                     for (var i = this.nextByteIndex; i < buffer.Length; ++i)
