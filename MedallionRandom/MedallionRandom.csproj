@@ -7,7 +7,7 @@
     <ProjectGuid>{3D92F2AE-317D-490C-8285-1BDD93A7A0F2}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Medallion.Random</RootNamespace>
+    <RootNamespace>Medallion</RootNamespace>
     <AssemblyName>MedallionRandom</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -45,9 +45,6 @@
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Rand.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="FodyWeavers.xml" />
   </ItemGroup>
   <ItemGroup>
     <None Include="MedallionRandom.nuspec" />
