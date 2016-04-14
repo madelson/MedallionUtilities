@@ -21,6 +21,17 @@ namespace Medallion
         }
 
         [Fact]
+        public void TestJavaCreate()
+        {
+            var sequences = Enumerable.Range(0, 100)
+                .Select(_ => Rand.CreateJavaRandom())
+                .Select(r => BitConverter.ToString(r.NextBytes().Take(10).ToArray()))
+                .ToArray();
+
+            Assert.Equal(actual: sequences.Distinct().Count(), expected: 100);
+        }
+
+        [Fact]
         public void TestDoubles()
         {
             var random1 = new System.Random(1);
@@ -56,6 +67,24 @@ namespace Medallion
             var average = Enumerable.Range(0, 20000).Select(_ => random.NextSingle())
                 .Average();
             Assert.Equal(actual: average, expected: .5f, precision: 2);
+        }
+
+        [Fact]
+        public void TestNextGaussian()
+        {
+            var rand = new Random(1);
+
+            var gaussians1 = Enumerable.Range(0, 10000).Select(_ => rand.NextGaussian()).ToArray();
+            var gaussians2 = rand.NextGaussians().Take(gaussians1.Length).ToArray();
+            
+            foreach (var gaussians in new[] { gaussians1, gaussians2 })
+            {
+                var average = gaussians.Average();
+                var stdev = StandardDeviation(gaussians);
+
+                Assert.True(Math.Abs(average) < 0.05, "was " + average);
+                Assert.True(Math.Abs(stdev - 1) < 0.05, "was " + average);
+            }            
         }
 
         [Fact]
