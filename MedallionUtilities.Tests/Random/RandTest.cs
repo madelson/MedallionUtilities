@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Medallion.Random
+namespace Medallion
 {
     public class RandTest
     {
@@ -35,9 +35,9 @@ namespace Medallion.Random
         public void TestNextBoolean()
         {
             var random = new System.Random(1);
-            var average = Enumerable.Range(0, 10000).Select(_ => Convert.ToInt32(random.NextBoolean()))
+            var average = Enumerable.Range(0, 20000).Select(_ => Convert.ToInt32(random.NextBoolean()))
                 .Average();
-            Assert.Equal(actual: average, expected: .5, precision: 2);
+            (Math.Abs(average - .5) < .01).ShouldEqual(true);
         }
 
         [Fact]
@@ -47,6 +47,64 @@ namespace Medallion.Random
             var average = Enumerable.Range(0, 20000).Select(_ => Math.Sign(random.NextInt32()))
                 .Average();
             Assert.Equal(actual: average, expected: 0, precision: 2);
+        }
+
+        [Fact]
+        public void TestNextSingle()
+        {
+            var random = new System.Random(54321);
+            var average = Enumerable.Range(0, 20000).Select(_ => random.NextSingle())
+                .Average();
+            Assert.Equal(actual: average, expected: .5f, precision: 2);
+        }
+
+        [Fact]
+        public void TestCurrent()
+        {
+            var current = Rand.Current;
+            Assert.Same(actual: Rand.Current, expected: current);
+            var threadCurrent = Task.Run(() => Rand.Current).Result;
+            Assert.NotSame(threadCurrent, current);
+            current.Next(); // does not throw
+            Assert.Throws<InvalidOperationException>(() => threadCurrent.Next());
+        }
+
+        [Fact]
+        public void TestShuffled()
+        {
+            var shuffled = Enumerable.Range(0, 1000)
+                .Shuffled(new Random(123456))
+                .ToArray();
+            var correlation = Correlation(shuffled.Select(Convert.ToDouble).ToArray(), Enumerable.Range(0, shuffled.Length).Select(Convert.ToDouble).ToArray());
+            Assert.True(Math.Abs(correlation) < .05, correlation.ToString());
+        }
+        
+        [Fact]
+        public void TestShuffle()
+        {
+            var list = Enumerable.Range(0, 1000).ToList();
+            list.Shuffle(new Random(654321));
+            var correlation = Correlation(list.Select(Convert.ToDouble).ToArray(), Enumerable.Range(0, list.Count).Select(Convert.ToDouble).ToArray());
+            Assert.True(Math.Abs(correlation) < .05, correlation.ToString());
+        }
+
+        private static double Correlation(double[] a, double[] b)
+        {
+            var meanA = a.Average();
+            var meanB = b.Average();
+
+            var stdevA = StandardDeviation(a);
+            var stdev2 = StandardDeviation(b);
+
+            var val = a.Zip(b, (aa, bb) => ((aa - meanA) / stdevA) * ((bb - meanB) / stdev2))
+                .Sum();
+            return val / (a.Length - 1);
+        }
+
+        private static double StandardDeviation(double[] values)
+        {
+            var mean = values.Average();
+            return Math.Sqrt(values.Sum(d => (d - mean) * (d - mean)) / (values.Length - 1));
         }
     }
 }

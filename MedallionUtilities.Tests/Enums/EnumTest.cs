@@ -10,18 +10,18 @@ namespace Medallion.Enums
 {
     public class EnumTest
     {
-        [Fact]
-        public void TestToString()
-        {
-            Assert.Equal("Compiled", Enum<RegexOptions>.ToString(RegexOptions.Compiled));
-        }
+        //[Fact]
+        //public void TestToString()
+        //{
+        //    Assert.Equal("Compiled", Enum<RegexOptions>.ToString(RegexOptions.Compiled));
+        //}
 
-        [Fact]
-        public void TestIsFlags()
-        {
-            Assert.True(Enum<RegexOptions>.IsFlags);
-            Assert.False(Enum<TestEnum>.IsFlags);
-        }
+        //[Fact]
+        //public void TestIsFlags()
+        //{
+        //    Assert.True(Enum<RegexOptions>.IsFlags);
+        //    Assert.False(Enum<TestEnum>.IsFlags);
+        //}
 
         public enum TestEnum
         {

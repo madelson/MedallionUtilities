@@ -70,6 +70,7 @@
     <Compile Include="Random\JavaRandomTest.cs" />
     <Compile Include="Random\RandTest.cs" />
     <Compile Include="Random\WeightedCoinFlipTest.cs" />
+    <Compile Include="SwitchExpression\SwitchExpressionsTest.cs" />
     <Compile Include="TestHelper.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -80,10 +81,6 @@
       <Project>{5d0313a2-ffff-4e57-87ce-8c92a6375810}</Project>
       <Name>MedallionCollections</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MedallionEnums\MedallionEnums.csproj">
-      <Project>{28f18714-5792-43f9-9099-ea3ede62948b}</Project>
-      <Name>MedallionEnums</Name>
-    </ProjectReference>
     <ProjectReference Include="..\MedallionRandom\MedallionRandom.csproj">
       <Project>{3d92f2ae-317d-490c-8285-1bdd93a7a0f2}</Project>
       <Name>MedallionRandom</Name>
@@ -92,6 +89,7 @@
   <ItemGroup>
     <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

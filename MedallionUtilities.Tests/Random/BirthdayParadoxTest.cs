@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Medallion.Random
+namespace Medallion
 {
     public class BirthdayParadoxTest
     {
