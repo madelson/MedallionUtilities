@@ -34,6 +34,9 @@ namespace Medallion
             this.Test(Rand.FromStream(new MemoryStream(bytes)));
         }
 
+        [Fact]
+        public void TestJavaRandom() => this.Test(Rand.CreateJavaRandom(1));
+
         private void Test(System.Random random)
         {
             const int Trials = 40000;
@@ -50,7 +53,7 @@ namespace Medallion
                 }
 
                 var observedProbability = count / (double)Trials;
-                Assert.Equal(actual: observedProbability, expected: probability, precision: 1);
+                (Math.Abs(observedProbability - probability) < .05).ShouldEqual(true);
             }
         }
     }

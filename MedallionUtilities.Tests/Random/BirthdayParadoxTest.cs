@@ -32,14 +32,18 @@ namespace Medallion
             this.TestRandom(random);
         }
 
+        [Fact]
+        public void TestJavaRandom() => this.TestRandom(Rand.CreateJavaRandom(123456789));
+
+        [Fact]
+        public void TestCurrentRandom() => this.TestRandom(Rand.Current);
+
         private void TestRandom(System.Random random)
         {
             new BirthdayParadoxProblem(23).AssertSimulationIsAccurate(() => random.Next(365));
 
             var byteStream = random.NextBytes().GetEnumerator();
             new BirthdayParadoxProblem(10, daysPerYear: 256).AssertSimulationIsAccurate(() => { byteStream.MoveNext(); return byteStream.Current; });
-
-
         }
     }
 
