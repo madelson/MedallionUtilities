@@ -323,6 +323,50 @@ namespace Medallion
         }
         #endregion
 
+        #region ---- Bounded Doubles ----
+        /// <summary>
+        /// Returns a random double value uniformly in [0, <paramref name="max"/>). The underlying randomness is
+        /// provided by <see cref="Random.NextDouble"/>, which may be unsuitable for very large ranges
+        /// </summary>
+        public static double NextDouble(this Random random, double max)
+        {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+            if (max < 0) { throw new ArgumentOutOfRangeException(nameof(max), max, "must be non-negative"); }
+            if (double.IsNaN(max) || double.IsInfinity(max)) { throw new ArgumentException("must not be infinity or NaN", nameof(max)); }
+
+            if (max == 0) { return 0; } // consistent with Next(int)
+
+            return max * random.NextDouble();
+        }
+
+        /// <summary>
+        /// Returns a random double value uniformly in [<paramref name="min"/>, <paramref name="max"/>). The 
+        /// underlying randomness is provided by <see cref="Random.NextDouble"/>, which may be unsuitable for 
+        /// very large ranges
+        /// </summary>
+        public static double NextDouble(this Random random, double min, double max)
+        {
+            if (random == null) { throw new ArgumentNullException(nameof(random)); }
+            var range = max - min;
+            if (double.IsNaN(range) || double.IsInfinity(range))
+            {
+                // these are all checked inside a block for both conditions to handle things like
+                // Inf - Inf = NaN
+
+                if (double.IsNaN(min)) { throw new ArgumentException("must not be NaN", nameof(min)); };
+                if (double.IsNaN(max)) { throw new ArgumentException("must not be NaN", nameof(max)); };
+                if (double.IsInfinity(min)) { throw new ArgumentOutOfRangeException(nameof(min), min, "must not be infinite"); }
+                if (double.IsInfinity(max)) { throw new ArgumentOutOfRangeException(nameof(max), max, "must not be infinite"); }
+                throw new ArgumentOutOfRangeException(nameof(max), max, $"difference between {min} and {max} is too large to be represented by {typeof(double)}");
+            }
+            if (range < 0) { throw new ArgumentOutOfRangeException(nameof(max), max, "must be greater than or equal to " + nameof(min)); }
+
+            if (range == 0) { return min; } // consistent with Next(int, int)
+
+            return min + (range * random.NextDouble());
+        }
+        #endregion
+
         #region ---- ThreadLocal ----
         [ThreadStatic]
         private static SafeThreadLocalRandom threadLocalRandom;

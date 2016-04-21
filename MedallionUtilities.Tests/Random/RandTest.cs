@@ -117,6 +117,37 @@ namespace Medallion
             Assert.True(Math.Abs(correlation) < .05, correlation.ToString());
         }
 
+        [Fact]
+        public void TestBoundedNextDouble()
+        {
+            Assert.Throws<ArgumentNullException>(() => default(Random).NextDouble(0));
+            Assert.Throws<ArgumentNullException>(() => default(Random).NextDouble(0, 1));
+
+            var rand = new Random(1);
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => rand.NextDouble(-double.Epsilon));
+            Assert.Throws<ArgumentException>(() => rand.NextDouble(double.NaN));
+            Assert.Throws<ArgumentException>(() => rand.NextDouble(double.PositiveInfinity));
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => rand.NextDouble(2, 1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => rand.NextDouble(double.MinValue, double.MaxValue));
+            Assert.Throws<ArgumentException>(() => rand.NextDouble(double.NaN, 1));
+            Assert.Throws<ArgumentException>(() => rand.NextDouble(1, double.NaN));
+            Assert.Throws<ArgumentException>(() => rand.NextDouble(double.NaN, double.NaN)); 
+            Assert.Throws<ArgumentOutOfRangeException>(() => rand.NextDouble(double.NegativeInfinity, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => rand.NextDouble(0, double.PositiveInfinity));
+            Assert.Throws<ArgumentOutOfRangeException>(() => rand.NextDouble(double.NegativeInfinity, double.NegativeInfinity));
+
+            rand.NextDouble(0).ShouldEqual(0);
+            rand.NextDouble(0, 0).ShouldEqual(0);
+
+            var average1 = Enumerable.Range(0, 40000).Select(_ => rand.NextDouble(2.5)).Average();
+            Assert.True(Math.Abs(average1 - 1.25) < 0.01, "was " + average1);
+
+            var average2 = Enumerable.Range(0, 80000).Select(_ => rand.NextDouble(-10, 6.4)).Average();
+            Assert.True(Math.Abs(average2 - -1.8) < 0.01, "was " + average2);
+        }
+
         private static double Correlation(double[] a, double[] b)
         {
             var meanA = a.Average();
