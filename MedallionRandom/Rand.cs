@@ -195,31 +195,9 @@ namespace Medallion
                 yield break;
             }
 
-            Random rand;
-            if (random == null)
-            {
-                // when we aren't provided with a Random, we generally have to 
-                // fall back on Create() instead of ThreadLocalRandom here because we have no way
-                // of knowing whether the iterator will be processed only on a single thread.
-                // However, for small lists we can avoid creating a new random by doing a non-lazy shuffle
-
-                if (list.Count <= 100)
-                {
-                    list.Shuffle(ThreadLocalRandom);
-                    foreach (var item in list)
-                    {
-                        yield return item;
-                    }
-                    yield break;
-                }
-
-                rand = Create();
-            }
-            else
-            {
-                rand = random;
-            }
-            
+            // note that it is vital that we use SingletonRandom.Instance over ThreadLocalRandom.Instance here,
+            // since the iterator could be advanced on different threads thus violating thread-safety
+            var rand = random ?? SingletonRandom.Instance;
             for (var i = 0; i < list.Count - 1; ++i)
             {
                 // swap i with a random index and yield the swapped value
@@ -242,7 +220,7 @@ namespace Medallion
         {
             if (list == null) { throw new ArgumentNullException(nameof(list)); }
 
-            var rand = random ?? ThreadLocalRandom;
+            var rand = random ?? ThreadLocalRandom.Current;
 
             for (var i = 0; i < list.Count - 1; ++i)
             {
@@ -367,102 +345,60 @@ namespace Medallion
         }
         #endregion
 
-        #region ---- ThreadLocal ----
-        [ThreadStatic]
-        private static SafeThreadLocalRandom threadLocalRandom;
-
-        private static SafeThreadLocalRandom ThreadLocalRandom { get { return threadLocalRandom ?? (threadLocalRandom = new SafeThreadLocalRandom()); } }
-
+        #region ---- ThreadLocal ----  
         /// <summary>
-        /// Returns a thread-local <see cref="Random"/> instance which can be used 
+        /// Returns a thread-safe <see cref="Random"/> instance which can be used 
         /// for static random calls
         /// </summary>
-        public static Random Current { get { return ThreadLocalRandom; } }
+        public static Random Current => SingletonRandom.Instance;
 
         /// <summary>
         /// Returns a double value in [0, 1)
         /// </summary>
-        public static double NextDouble()
-        {
-            return ThreadLocalRandom.UnsafeNextDouble();
-        }
-        
+        public static double NextDouble() => ThreadLocalRandom.Current.NextDouble();
+
         /// <summary>
         /// Returns an int value in [<paramref name="minValue"/>, <paramref name="maxValue"/>)
         /// </summary>
-        public static int Next(int minValue, int maxValue)
-        {
-            return ThreadLocalRandom.UnsafeNext(minValue, maxValue);
-        }
-        
-        private sealed class SafeThreadLocalRandom : Random, INextGaussianRandom
-        {
-            private readonly Thread thread;
+        public static int Next(int minValue, int maxValue) => ThreadLocalRandom.Current.Next(minValue, maxValue);
 
-            internal SafeThreadLocalRandom()
+        private sealed class SingletonRandom : Random, INextGaussianRandom
+        {
+            public static readonly SingletonRandom Instance = new SingletonRandom();
+
+            private SingletonRandom() : base(0) { }
+
+            public override int Next() => ThreadLocalRandom.Current.Next();
+
+            public override int Next(int maxValue) => ThreadLocalRandom.Current.Next(maxValue);
+
+            public override int Next(int minValue, int maxValue) => ThreadLocalRandom.Current.Next(minValue, maxValue);
+
+            public override void NextBytes(byte[] buffer) => ThreadLocalRandom.Current.NextBytes(buffer);
+
+            public override double NextDouble() => ThreadLocalRandom.Current.NextDouble();
+
+            protected override double Sample() => ThreadLocalRandom.Current.NextDouble();
+
+            double INextGaussianRandom.NextGaussian() => ThreadLocalRandom.Current.NextGaussian();
+        }
+
+        private sealed class ThreadLocalRandom : Random, INextGaussianRandom
+        {
+            [ThreadStatic]
+            private static ThreadLocalRandom currentInstance;
+
+            public static ThreadLocalRandom Current { get { return currentInstance ?? (currentInstance = new ThreadLocalRandom()); } }
+
+            private ThreadLocalRandom()
                 : base(Seed: unchecked((31 * Thread.CurrentThread.ManagedThreadId) + Environment.TickCount))
             {
-                this.thread = Thread.CurrentThread;
             }
-
-            // note: we don't need to override Sample() because it's protected. This
-            // allows us to have Unsafe() methods that call base, even though the base
-            // methods might call Sample(). The disadvantage is that if later versions of
-            // the framework add new methods which call Sample() under the hood, they
-            // won't have thread-protection until we update this class. Given that the protection
-            // is largely developer convenience, I'm ok with that tradeoff
-
-            public override int Next()
-            {
-                this.VerifyThread();
-                return base.Next();
-            }
-
-            public int UnsafeNext()
-            {
-                return base.Next();
-            }
-
-            public override int Next(int maxValue)
-            {
-                this.VerifyThread();
-                return base.Next(maxValue);
-            }
-
-            public override int Next(int minValue, int maxValue)
-            {
-                this.VerifyThread();
-                return base.Next(minValue, maxValue);
-            }
-
-            public int UnsafeNext(int minValue, int maxValue)
-            {
-                return base.Next(minValue, maxValue);
-            }
-
-            public override void NextBytes(byte[] buffer)
-            {
-                this.VerifyThread();
-                base.NextBytes(buffer);
-            }
-
-            public override double NextDouble()
-            {
-                this.VerifyThread();
-                return base.NextDouble();
-            }
-
-            public double UnsafeNextDouble()
-            {
-                return base.NextDouble();
-            }
-
+            
             private double? nextNextGaussian;
 
-            double INextGaussianRandom.NextGaussian()
+            public double NextGaussian()
             {
-                this.VerifyThread();
-
                 if (this.nextNextGaussian.HasValue)
                 {
                     var result = this.nextNextGaussian.Value;
@@ -474,14 +410,6 @@ namespace Medallion
                 this.NextTwoGaussians(out next, out nextNext);
                 this.nextNextGaussian = nextNext;
                 return next;
-            }
-
-            private void VerifyThread()
-            {
-                if (Thread.CurrentThread != this.thread)
-                {
-                    throw new InvalidOperationException($"Cannot use thread-local random from thread {this.thread.ManagedThreadId} on thread {Thread.CurrentThread.ManagedThreadId}");
-                }
             }
         }
         #endregion
@@ -495,7 +423,7 @@ namespace Medallion
         /// </summary>
         public static Random Create()
         {
-            var combinedSeed = unchecked((31 * Environment.TickCount) + ThreadLocalRandom.UnsafeNext());
+            var combinedSeed = unchecked((31 * Environment.TickCount) + ThreadLocalRandom.Current.Next());
             return new Random(combinedSeed);
         }
         #endregion
@@ -697,7 +625,7 @@ namespace Medallion
         /// </summary>
         public static Random CreateJavaRandom()
         {
-            var seed = ((long)Environment.TickCount << 32) | (uint)ThreadLocalRandom.Next();
+            var seed = ((long)Environment.TickCount << 32) | (uint)ThreadLocalRandom.Current.Next();
             return CreateJavaRandom(seed);
         }
 

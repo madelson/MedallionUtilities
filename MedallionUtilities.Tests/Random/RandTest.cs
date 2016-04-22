@@ -93,9 +93,8 @@ namespace Medallion
             var current = Rand.Current;
             Assert.Same(actual: Rand.Current, expected: current);
             var threadCurrent = Task.Run(() => Rand.Current).Result;
-            Assert.NotSame(threadCurrent, current);
+            Assert.Same(threadCurrent, current);
             current.Next(); // does not throw
-            Assert.Throws<InvalidOperationException>(() => threadCurrent.Next());
         }
 
         [Fact]
