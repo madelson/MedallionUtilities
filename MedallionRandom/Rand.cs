@@ -184,7 +184,11 @@ namespace Medallion
         /// </summary>
         public static IEnumerable<T> Shuffled<T>(this IEnumerable<T> source, Random random = null)
         {
-            return ShuffledIterator(source, random);
+            if (source == null) { throw new ArgumentNullException(nameof(source)); }
+
+            // note that it is vital that we use SingletonRandom.Instance over ThreadLocalRandom.Instance here,
+            // since the iterator could be advanced on different threads thus violating thread-safety
+            return ShuffledIterator(source, random ?? SingletonRandom.Instance);
         }
 
         private static IEnumerable<T> ShuffledIterator<T>(IEnumerable<T> source, Random random)
@@ -195,13 +199,10 @@ namespace Medallion
                 yield break;
             }
 
-            // note that it is vital that we use SingletonRandom.Instance over ThreadLocalRandom.Instance here,
-            // since the iterator could be advanced on different threads thus violating thread-safety
-            var rand = random ?? SingletonRandom.Instance;
             for (var i = 0; i < list.Count - 1; ++i)
             {
                 // swap i with a random index and yield the swapped value
-                var randomIndex = rand.Next(minValue: i, maxValue: list.Count);
+                var randomIndex = random.Next(minValue: i, maxValue: list.Count);
                 var randomValue = list[randomIndex];
                 list[randomIndex] = list[i];
                 // note that we don't even have to put randomValue in list[i], because this is a throwaway list!
@@ -250,34 +251,6 @@ namespace Medallion
             double result, ignored;
             random.NextTwoGaussians(out result, out ignored);
             return result;
-        }
-
-        /// <summary>
-        /// Returns a sequence of normally-distributed double values with mean 0 and standard
-        /// deviation 1.
-        /// </summary>
-        public static IEnumerable<double> NextGaussians(this Random random)
-        {
-            if (random == null) { throw new ArgumentNullException(nameof(random)); }
-
-            return NextGaussiansIterator(random);
-        }
-
-        private static IEnumerable<double> NextGaussiansIterator(Random random)
-        {
-            var nextGaussiansRandom = random as INextGaussianRandom;
-            if (nextGaussiansRandom != null)
-            {
-                while (true) { yield return nextGaussiansRandom.NextGaussian(); }
-            }
-
-            while (true)
-            {
-                double next, nextNext;
-                random.NextTwoGaussians(out next, out nextNext);
-                yield return next;
-                yield return nextNext;
-            }
         }
 
         private interface INextGaussianRandom
@@ -385,13 +358,15 @@ namespace Medallion
 
         private sealed class ThreadLocalRandom : Random, INextGaussianRandom
         {
+            private static readonly DateTime SeedTime = DateTime.UtcNow;
+
             [ThreadStatic]
             private static ThreadLocalRandom currentInstance;
 
             public static ThreadLocalRandom Current { get { return currentInstance ?? (currentInstance = new ThreadLocalRandom()); } }
 
             private ThreadLocalRandom()
-                : base(Seed: unchecked((31 * Thread.CurrentThread.ManagedThreadId) + Environment.TickCount))
+                : base(Seed: HashCombine(HashCombine(SeedTime.GetHashCode(), Thread.CurrentThread.ManagedThreadId), Environment.TickCount))
             {
             }
             
@@ -412,6 +387,9 @@ namespace Medallion
                 return next;
             }
         }
+
+        // based on Tuple.CombineHashCodes
+        private static int HashCombine(int hash1, int hash2) => unchecked(((hash1 << 5) + hash1) ^ hash2);
         #endregion
 
         #region ---- Factory ---- 
@@ -421,46 +399,60 @@ namespace Medallion
         /// This avoids the problem of many <see cref="Random"/>s created close together being seeded
         /// with the same value
         /// </summary>
-        public static Random Create()
-        {
-            var combinedSeed = unchecked((31 * Environment.TickCount) + ThreadLocalRandom.Current.Next());
-            return new Random(combinedSeed);
-        }
+        public static Random Create() => new Random(HashCombine(Environment.TickCount, ThreadLocalRandom.Current.Next()));
         #endregion
 
         #region ---- System.IO.Stream Interop ----
         /// <summary>
         /// Creates a <see cref="Random"/> instance which uses the bytes from <see cref="Stream"/>
-        /// as a source of randomness
+        /// as a source of randomness. When the <see cref="Stream"/> is exhausted, uses 
+        /// <see cref="Stream.Seek(long, SeekOrigin)"/> to reset (if <see cref="Stream.CanSeek"/>).
+        /// Throws <see cref="InvalidOperationException"/> otherwise
         /// </summary>
         public static Random FromStream(Stream randomBytes)
         {
             if (randomBytes == null) { throw new ArgumentNullException(nameof(randomBytes)); }
             if (!randomBytes.CanRead) { throw new ArgumentException("must be readable", nameof(randomBytes)); }
 
-            return new StreamRandomNumberGenerator(randomBytes).AsRandom();
+            return new StreamRandom(randomBytes);
         }
-        
-        private sealed class StreamRandomNumberGenerator : RandomNumberGenerator
+
+        private sealed class StreamRandom : NextBitsRandom
         {
             private readonly Stream stream;
+            private readonly byte[] nextBitsBuffer = new byte[4];
 
-            internal StreamRandomNumberGenerator(Stream stream)
+            public StreamRandom(Stream stream)
+                : base(seed: 0)
             {
                 this.stream = stream;
             }
 
-            public override void GetBytes(byte[] data)
+            internal override int NextBits(int bits)
             {
-                var justResetStream = false;
-                var bytesRead = 0;
-                while (bytesRead < data.Length)
-                {
-                    // based on StreamReader.ReadBlock. We don't want to
-                    // give up until the end of the file is reached
+                var count = bits / 8;
+                this.InternalNextBytes(this.nextBitsBuffer, count: count);
+                
+                var result = 0;
+                for (var i = 0; i < count; ++i) { result = unchecked((result << 8) + this.nextBitsBuffer[i]); }
+                return result;
+            }
 
-                    var nextBytesRead = this.stream.Read(data, offset: bytesRead, count: data.Length - bytesRead);
-                    if (nextBytesRead == 0) // eof
+            public override void NextBytes(byte[] buffer)
+            {
+                if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+
+                this.InternalNextBytes(buffer, buffer.Length);
+            }
+
+            private void InternalNextBytes(byte[] buffer, int count)
+            {
+                var totalBytesRead = 0;
+                var justResetStream = false;
+                while (totalBytesRead < count)
+                {
+                    var bytesRead = this.stream.Read(buffer, offset: totalBytesRead, count: count - totalBytesRead);
+                    if (bytesRead == 0) // eof
                     {
                         if (!this.stream.CanSeek)
                         {
@@ -478,7 +470,7 @@ namespace Medallion
                     }
                     else
                     {
-                        bytesRead += nextBytesRead;
+                        totalBytesRead += bytesRead;
                         justResetStream = false;
                     }
                 }
@@ -623,20 +615,13 @@ namespace Medallion
         /// is seeded with a time-dependent value which will vary greatly even across close-together calls to
         /// <see cref="CreateJavaRandom()"/>
         /// </summary>
-        public static Random CreateJavaRandom()
-        {
-            var seed = ((long)Environment.TickCount << 32) | (uint)ThreadLocalRandom.Current.Next();
-            return CreateJavaRandom(seed);
-        }
+        public static Random CreateJavaRandom() => CreateJavaRandom(ThreadLocalRandom.Current.NextInt64() ^ Environment.TickCount);
 
         /// <summary>
         /// Creates a <see cref="Random"/> which replicates the same random sequence as is produced by
         /// the standard random number generator in the JRE using the same <paramref name="seed"/>
         /// </summary>
-        public static Random CreateJavaRandom(long seed)
-        {
-            return new JavaRandom(seed);
-        }
+        public static Random CreateJavaRandom(long seed) => new JavaRandom(seed);
 
         private sealed class JavaRandom : NextBitsRandom
         {
