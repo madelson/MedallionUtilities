@@ -67,7 +67,9 @@
     <Compile Include="Enums\EnumTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Random\BirthdayParadoxTest.cs" />
-    <Compile Include="Random\JavaRandomTest.cs" />
+    <Compile Include="Random\JavaRandomCompatibilityTest.cs" />
+    <Compile Include="Random\RandomTest.cs" />
+    <Compile Include="Random\RandomTests.cs" />
     <Compile Include="Random\RandTest.cs" />
     <Compile Include="Random\WeightedCoinFlipTest.cs" />
     <Compile Include="SwitchExpression\SwitchExpressionsTest.cs" />

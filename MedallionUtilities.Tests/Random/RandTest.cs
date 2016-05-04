@@ -177,7 +177,7 @@ namespace Medallion
             public override bool CanSeek => false;
         }
 
-        private static double Correlation(double[] a, double[] b)
+        public static double Correlation(double[] a, double[] b)
         {
             var meanA = a.Average();
             var meanB = b.Average();
@@ -190,7 +190,7 @@ namespace Medallion
             return val / (a.Length - 1);
         }
 
-        private static double StandardDeviation(double[] values)
+        public static double StandardDeviation(double[] values)
         {
             var mean = values.Average();
             return Math.Sqrt(values.Sum(d => (d - mean) * (d - mean)) / (values.Length - 1));

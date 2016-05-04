@@ -12,32 +12,32 @@ namespace Medallion
     public class WeightedCoinFlipTest
     {
         [Fact]
-        public void TestSystemRandom() => this.Test(new System.Random(int.MaxValue));
+        public void TestSystemRandom() => Test(new System.Random(int.MaxValue));
 
         [Fact]
         public void TestCryptoRandom()
         {
             using (var cryptoRandom = new RNGCryptoServiceProvider())
             {
-                this.Test(cryptoRandom.AsRandom());
+                Test(cryptoRandom.AsRandom());
             }
         }
 
         [Fact]
-        public void TestCurrentRandom() => this.Test(Rand.Current);
+        public void TestCurrentRandom() => Test(Rand.Current);
 
         [Fact]
         public void TestStreamRandom()
         {
             var bytes = new byte[12345];
             Rand.Current.NextBytes(bytes);
-            this.Test(Rand.FromStream(new MemoryStream(bytes)));
+            Test(Rand.FromStream(new MemoryStream(bytes)));
         }
 
         [Fact]
-        public void TestJavaRandom() => this.Test(Rand.CreateJavaRandom(1));
+        public void TestJavaRandom() => Test(Rand.CreateJavaRandom(1));
 
-        private void Test(System.Random random)
+        public static void Test(System.Random random)
         {
             const int Trials = 40000;
 
