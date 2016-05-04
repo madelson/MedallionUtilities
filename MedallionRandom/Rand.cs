@@ -146,6 +146,7 @@ namespace Medallion
             {
                 throw new ArgumentOutOfRangeException(nameof(probability), $"{nameof(probability)} must be in [0, 1]. Found {probability}");
             }
+            if (double.IsNaN(probability)) { throw new ArgumentException("must not be NaN", nameof(probability)); }
 
             return random.NextDouble() < probability;
         }
@@ -678,21 +679,23 @@ namespace Medallion
             {
                 // unsigned so we can unsigned shift below
                 uint result = 0;
-                checked
+                var i = 0;
+                while (true)
                 {
-                    for (var i = 0; i < bits; i += 8)
+                    if (this.nextByteIndex == BufferLength)
                     {
-                        if (this.nextByteIndex == BufferLength)
-                        {
-                            this.rand.GetBytes(this.buffer);
-                            this.nextByteIndex = 0;
-                        }
-                        result += (uint)this.buffer[this.nextByteIndex++] << i;
+                        this.rand.GetBytes(this.buffer);
+                        this.nextByteIndex = 0;
+                    }
+                    checked { result += (uint)this.buffer[this.nextByteIndex++] << i; };
+
+                    i += 8;
+                    if (i >= bits)
+                    {
+                        var nextBits = result >> (i - bits);
+                        return unchecked((int)nextBits);
                     }
                 }
-                
-                var nextBits = result >> (32 - bits); 
-                return unchecked((int)nextBits);
             }
 
             // we override this for performance reasons, since we can call the underlying RNG's NextBytes() method directly
