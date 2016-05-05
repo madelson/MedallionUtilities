@@ -36,20 +36,4 @@ namespace Medallion
     {
         protected override Random GetRandom() => new System.Security.Cryptography.RNGCryptoServiceProvider().AsRandom();
     }
-
-    public class StreamRandomTest : RandomTest
-    {
-        private readonly byte[] randomBytes;
-
-        public StreamRandomTest()
-        {
-            this.randomBytes = new byte[10 * 4096];
-            using (var cryptoRandom = new System.Security.Cryptography.RNGCryptoServiceProvider())
-            {
-                cryptoRandom.GetBytes(this.randomBytes);
-            }
-        }
-
-        protected override Random GetRandom() => Rand.FromStream(new MemoryStream(this.randomBytes));
-    }
 }

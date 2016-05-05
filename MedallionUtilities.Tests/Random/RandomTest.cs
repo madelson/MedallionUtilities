@@ -67,7 +67,7 @@ namespace Medallion
             var random = this.GetRandom();
             var average = Enumerable.Range(0, 20000).Select(_ => Math.Sign(random.NextInt32()))
                 .Average();
-            Assert.Equal(actual: average, expected: 0, precision: 2);
+            Assert.True(Math.Abs(average) < .01, $"was {average}");
         }
 
         [Fact]
@@ -157,7 +157,7 @@ namespace Medallion
             numbers.Sort();
             numbers.SequenceShouldEqual(Enumerable.Range(0, 100));
 
-            var list = Enumerable.Range(0, 1000).ToList();
+            var list = Enumerable.Range(0, 2000).ToList();
             list.Shuffle(this.GetRandom());
             var correlation = RandTest.Correlation(list.Select(Convert.ToDouble).ToArray(), Enumerable.Range(0, list.Count).Select(Convert.ToDouble).ToArray());
             Assert.True(Math.Abs(correlation) < .05, correlation.ToString());
@@ -188,10 +188,10 @@ namespace Medallion
             rand.NextDouble(0, 0).ShouldEqual(0);
 
             var average1 = Enumerable.Range(0, 40000).Select(_ => rand.NextDouble(2.5)).Average();
-            Assert.True(Math.Abs(average1 - 1.25) < 0.01, "was " + average1);
+            Assert.True(Math.Abs(average1 - 1.25) < 0.05, "was " + average1);
 
             var average2 = Enumerable.Range(0, 80000).Select(_ => rand.NextDouble(-10, 6.4)).Average();
-            Assert.True(Math.Abs(average2 - -1.8) < 0.01, "was " + average2);
+            Assert.True(Math.Abs(average2 - -1.8) < 0.05, "was " + average2);
         }
     }
 }

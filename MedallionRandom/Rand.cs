@@ -6,10 +6,8 @@ using System.Threading.Tasks;
 
 namespace Medallion
 {
-    using System.IO;
     using System.Security.Cryptography;
     using System.Threading;
-    using Random = System.Random;
     
     /// <summary>
     /// Contains helpers and extensions for working with random number generators
@@ -401,82 +399,6 @@ namespace Medallion
         /// with the same value
         /// </summary>
         public static Random Create() => new Random(HashCombine(Environment.TickCount, ThreadLocalRandom.Current.Next()));
-        #endregion
-
-        #region ---- System.IO.Stream Interop ----
-        /// <summary>
-        /// Creates a <see cref="Random"/> instance which uses the bytes from <see cref="Stream"/>
-        /// as a source of randomness. When the <see cref="Stream"/> is exhausted, uses 
-        /// <see cref="Stream.Seek(long, SeekOrigin)"/> to reset (if <see cref="Stream.CanSeek"/>).
-        /// Throws <see cref="InvalidOperationException"/> otherwise
-        /// </summary>
-        public static Random FromStream(Stream randomBytes)
-        {
-            if (randomBytes == null) { throw new ArgumentNullException(nameof(randomBytes)); }
-            if (!randomBytes.CanRead) { throw new ArgumentException("must be readable", nameof(randomBytes)); }
-
-            return new StreamRandom(randomBytes);
-        }
-
-        private sealed class StreamRandom : NextBitsRandom
-        {
-            private readonly Stream stream;
-            private readonly byte[] nextBitsBuffer = new byte[4];
-
-            public StreamRandom(Stream stream)
-                : base(seed: 0)
-            {
-                this.stream = stream;
-            }
-
-            internal override int NextBits(int bits)
-            {
-                var count = (bits + 7) / 8;
-                this.InternalNextBytes(this.nextBitsBuffer, count: count);
-                
-                uint result = 0;
-                for (var i = 0; i < count; ++i) { result = unchecked((result << 8) + this.nextBitsBuffer[i]); }
-                return unchecked((int)(result >> ((8 * count) - bits)));
-            }
-
-            public override void NextBytes(byte[] buffer)
-            {
-                if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
-
-                this.InternalNextBytes(buffer, buffer.Length);
-            }
-
-            private void InternalNextBytes(byte[] buffer, int count)
-            {
-                var totalBytesRead = 0;
-                var justResetStream = false;
-                while (totalBytesRead < count)
-                {
-                    var bytesRead = this.stream.Read(buffer, offset: totalBytesRead, count: count - totalBytesRead);
-                    if (bytesRead == 0) // eof
-                    {
-                        if (!this.stream.CanSeek)
-                        {
-                            throw new InvalidOperationException("Cannot produce additional random bytes because the given stream is exhausted and does not support seeking");
-                        }
-                        if (justResetStream)
-                        {
-                            // prevents us from going into an infinite loop seeking back to the beginning of an empty stream
-                            throw new InvalidOperationException("Cannot produce additional random bytes because the given stream is empty");
-                        }
-
-                        // reset the stream
-                        this.stream.Seek(0, SeekOrigin.Begin);
-                        justResetStream = true;
-                    }
-                    else
-                    {
-                        totalBytesRead += bytesRead;
-                        justResetStream = false;
-                    }
-                }
-            }
-        }
         #endregion
         
         #region ---- NextBits Random ----

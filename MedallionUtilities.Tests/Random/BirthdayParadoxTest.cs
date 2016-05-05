@@ -24,15 +24,6 @@ namespace Medallion
         }
 
         [Fact]
-        public void TestStreamRandom()
-        {
-            var bytes = new byte[BirthdayParadoxProblem.DefaultTrials * 2];
-            new System.Random(0).NextBytes(bytes);
-            var random = Rand.FromStream(new MemoryStream(bytes));
-            this.TestRandom(random);
-        }
-
-        [Fact]
         public void TestJavaRandom() => this.TestRandom(Rand.CreateJavaRandom(123456789));
 
         [Fact]

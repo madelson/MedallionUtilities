@@ -25,15 +25,7 @@ namespace Medallion
 
         [Fact]
         public void TestCurrentRandom() => Test(Rand.Current);
-
-        [Fact]
-        public void TestStreamRandom()
-        {
-            var bytes = new byte[12345];
-            Rand.Current.NextBytes(bytes);
-            Test(Rand.FromStream(new MemoryStream(bytes)));
-        }
-
+        
         [Fact]
         public void TestJavaRandom() => Test(Rand.CreateJavaRandom(1));
 

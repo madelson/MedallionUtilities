@@ -143,40 +143,7 @@ namespace Medallion
             var average2 = Enumerable.Range(0, 80000).Select(_ => rand.NextDouble(-10, 6.4)).Average();
             Assert.True(Math.Abs(average2 - -1.8) < 0.01, "was " + average2);
         }
-
-        [Fact]
-        public void TestStreamRandomChecks()
-        {
-            Assert.Throws<ArgumentNullException>(() => Rand.FromStream(default(Stream)));
-            var disposedStream = new MemoryStream();
-            disposedStream.Dispose();
-            Assert.Throws<ArgumentException>(() => Rand.FromStream(disposedStream));
-
-            var emptyStream = new MemoryStream();
-            var emptyStreamRandom = Rand.FromStream(emptyStream);
-            Assert.Throws<InvalidOperationException>(() => emptyStreamRandom.Next());
-
-            var oneByteStream = new MemoryStream(new byte[] { 111 });
-            var oneByteRandom = Rand.FromStream(oneByteStream);
-            var bytes = new byte[128];
-            oneByteRandom.NextBytes(bytes);
-            Assert.Equal(actual: bytes, expected: Enumerable.Repeat((byte)111, bytes.Length));
-
-            var noSeekStream = new NoSeekMemoryStream(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 });
-            var noSeekRandom = Rand.FromStream(noSeekStream);
-            BitConverter.GetBytes(noSeekRandom.NextInt64())
-                .OrderBy(b => b)
-                .SequenceShouldEqual(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 });
-            Assert.Throws<InvalidOperationException>(() => noSeekRandom.NextBytes(new byte[1]));
-        }
-
-        private class NoSeekMemoryStream : MemoryStream
-        {
-            public NoSeekMemoryStream(byte[] bytes) : base(bytes) { }
-
-            public override bool CanSeek => false;
-        }
-
+        
         public static double Correlation(double[] a, double[] b)
         {
             var meanA = a.Average();
