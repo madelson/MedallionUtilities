@@ -60,12 +60,33 @@ namespace Medallion
         }
 
         [Fact]
+        public void TestNext()
+        {
+            var random = this.GetRandom();
+
+            var sum = 0L;
+            const int Trials = 80000;
+            for (var i = 0; i < Trials; ++i)
+            {
+                var next = random.Next();
+                Assert.True(next >= 0);
+                Assert.True(next < int.MaxValue);
+                sum += next;
+            }
+
+            var average = sum / (double)Trials;
+            var expected = (int.MaxValue - 1) / 2.0;
+            var error = (average - expected) / expected;
+            Assert.True(Math.Abs(error) < 0.01, $"was {average} (error = {error})");
+        }
+
+        [Fact]
         public void TestNextInt32()
         {
             Assert.Throws<ArgumentNullException>(() => Rand.NextInt32(null));
 
             var random = this.GetRandom();
-            var average = Enumerable.Range(0, 20000).Select(_ => Math.Sign(random.NextInt32()))
+            var average = Enumerable.Range(0, 30000).Select(_ => Math.Sign(random.NextInt32()))
                 .Average();
             Assert.True(Math.Abs(average) < .01, $"was {average}");
         }
@@ -140,7 +161,7 @@ namespace Medallion
                 .OrderBy(i => i)
                 .SequenceShouldEqual(Enumerable.Range(0, 100));
 
-            var shuffled = Enumerable.Range(0, 1000)
+            var shuffled = Enumerable.Range(0, 2000)
                 .Shuffled(this.GetRandom())
                 .ToArray();
             var correlation = RandTest.Correlation(shuffled.Select(Convert.ToDouble).ToArray(), Enumerable.Range(0, shuffled.Length).Select(Convert.ToDouble).ToArray());
