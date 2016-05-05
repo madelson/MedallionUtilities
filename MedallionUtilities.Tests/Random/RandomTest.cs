@@ -97,6 +97,24 @@ namespace Medallion
         }
 
         [Fact]
+        public void TestNextWithTwoBounds()
+        {
+            var random = this.GetRandom();
+            random.Next(0, 0).ShouldEqual(0);
+            random.Next(10, 10).ShouldEqual(10);
+            random.Next(-1, -1).ShouldEqual(-1);
+            Assert.Throws<ArgumentOutOfRangeException>(() => random.Next(1, -2));
+
+            var average = Enumerable.Range(0, 30000).Average(_ => random.Next(-4, 3));
+            var error = (average - -1) / -1.0;
+            Assert.True(Math.Abs(error) < 0.02, $"was {average} (error = {error})");
+
+            var averageLargeRange = Enumerable.Range(0, 30000).Average(_ => random.Next(-2000000000, 1000000001));
+            var errorLargeRange = (averageLargeRange - -500000000) / -500000000.0;
+            Assert.True(Math.Abs(errorLargeRange) < 0.02, $"was {averageLargeRange} (error = {errorLargeRange})");
+        }
+
+        [Fact]
         public void TestNextInt32()
         {
             Assert.Throws<ArgumentNullException>(() => Rand.NextInt32(null));
