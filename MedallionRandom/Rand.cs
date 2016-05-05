@@ -431,12 +431,12 @@ namespace Medallion
 
             internal override int NextBits(int bits)
             {
-                var count = bits / 8;
+                var count = (bits + 7) / 8;
                 this.InternalNextBytes(this.nextBitsBuffer, count: count);
                 
-                var result = 0;
+                uint result = 0;
                 for (var i = 0; i < count; ++i) { result = unchecked((result << 8) + this.nextBitsBuffer[i]); }
-                return result;
+                return unchecked((int)(result >> ((8 * count) - bits)));
             }
 
             public override void NextBytes(byte[] buffer)
