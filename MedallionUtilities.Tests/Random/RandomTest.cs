@@ -81,6 +81,22 @@ namespace Medallion
         }
 
         [Fact]
+        public void TestNextWithOneBound()
+        {
+            var random = this.GetRandom();
+
+            random.Next(0).ShouldEqual(0);
+            random.Next(1).ShouldEqual(0);
+            Assert.Throws<ArgumentOutOfRangeException>(() => random.Next(-1));
+
+            var average = Enumerable.Range(2, 30000)
+                .Sum(i => random.Next(i));
+            var expected = Enumerable.Range(2, 30000).Sum(i => (i - 1) / 2.0);
+            var error = (average - expected) / expected;
+            Assert.True(Math.Abs(error) < 0.01, $"was {average} (error = {error})");
+        }
+
+        [Fact]
         public void TestNextInt32()
         {
             Assert.Throws<ArgumentNullException>(() => Rand.NextInt32(null));
