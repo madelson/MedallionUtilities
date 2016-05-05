@@ -115,6 +115,37 @@ namespace Medallion
         }
 
         [Fact]
+        public void TestNextBytes()
+        {
+            var random = this.GetRandom();
+
+            Assert.Throws<ArgumentNullException>(() => random.NextBytes(null));
+            
+            var buffer = new byte[100];
+            var bitSetCounts = new int[8];
+            const int Trials = 500;
+            for (var i = 0; i < Trials; ++i)
+            {
+                random.NextBytes(buffer);
+                for (var j = 0; j < buffer.Length; ++j)
+                {
+                    var next = buffer[j];
+                    for (var bit = 0; bit < bitSetCounts.Length; ++bit)
+                    {
+                        if ((next & (1 << bit)) != 0) { bitSetCounts[bit]++; }
+                    }
+                }
+            }
+
+            double totalTrials = Trials * buffer.Length;
+            Assert.True(Math.Abs(bitSetCounts.Select(c => c / totalTrials).Average() - .5) < .01, $"was {string.Join(", ", bitSetCounts)}");
+            for (var bit = 0; bit < bitSetCounts.Length; ++bit)
+            {
+                Assert.True(Math.Abs((bitSetCounts[bit] / totalTrials) - .5) < .1, $"bit {bit} was {bitSetCounts[bit]} / {totalTrials}");
+            }
+        }
+
+        [Fact]
         public void TestNextInt32()
         {
             Assert.Throws<ArgumentNullException>(() => Rand.NextInt32(null));
