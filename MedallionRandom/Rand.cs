@@ -179,7 +179,13 @@ namespace Medallion
         #region ---- Shuffling ----
         /// <summary>
         /// Returns <paramref name="source"/> randomly shuffled using 
-        /// <paramref name="random"/> or else <see cref="Rand.Current"/>
+        /// <paramref name="random"/> or else <see cref="Rand.Current"/>.
+        /// 
+        /// This method performs a lazy "streaming" shuffle: when the first
+        /// element of the returned <see cref="IEnumerable{T}"/> is requested, the
+        /// entire <paramref name="source"/> sequence is enumerated. The <paramref name="random"/>
+        /// is then used lazily to shuffle the next element into place as the result
+        /// sequence is enumerated
         /// </summary>
         public static IEnumerable<T> Shuffled<T>(this IEnumerable<T> source, Random random = null)
         {
@@ -579,7 +585,7 @@ namespace Medallion
         public static Random AsRandom(this RandomNumberGenerator randomNumberGenerator)
         {
             if (randomNumberGenerator == null) { throw new ArgumentNullException(nameof(randomNumberGenerator)); }
-
+            
             return new RandomNumberGeneratorRandom(randomNumberGenerator);
         }
         
