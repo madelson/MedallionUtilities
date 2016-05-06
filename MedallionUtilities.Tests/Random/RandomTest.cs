@@ -153,7 +153,9 @@ namespace Medallion
             var random = this.GetRandom();
             var average = Enumerable.Range(0, 30000).Select(_ => Math.Sign(random.NextInt32()))
                 .Average();
-            Assert.True(Math.Abs(average) < .01, $"was {average}");
+            var expected = ((long)int.MaxValue - (long)int.MinValue) / 2;
+            var error = Math.Abs(average - expected) / (double)expected;
+            Assert.True(Math.Abs(average) < 0.01, $"was {average}");
         }
 
         [Fact]

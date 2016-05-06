@@ -68,6 +68,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Random\BirthdayParadoxTest.cs" />
     <Compile Include="Random\JavaRandomCompatibilityTest.cs" />
+    <Compile Include="Random\RandomRegressionTest.cs" />
+    <Compile Include="Random\RandomRegressionTests.cs" />
     <Compile Include="Random\RandomTest.cs" />
     <Compile Include="Random\RandomTests.cs" />
     <Compile Include="Random\RandTest.cs" />
