@@ -15,4 +15,7 @@
     <dependencies>
     </dependencies>
   </metadata>
+  <files>
+    <file src="bin/Debug/MedallionRandom.XML" />
+  </files>
 </package>

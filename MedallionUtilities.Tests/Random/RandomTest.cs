@@ -107,11 +107,11 @@ namespace Medallion
 
             var average = Enumerable.Range(0, 30000).Average(_ => random.Next(-4, 3));
             var error = (average - -1) / -1.0;
-            Assert.True(Math.Abs(error) < 0.02, $"was {average} (error = {error})");
+            Assert.True(Math.Abs(error) < 0.05, $"was {average} (error = {error})");
 
             var averageLargeRange = Enumerable.Range(0, 30000).Average(_ => random.Next(-2000000000, 1000000001));
             var errorLargeRange = (averageLargeRange - -500000000) / -500000000.0;
-            Assert.True(Math.Abs(errorLargeRange) < 0.02, $"was {averageLargeRange} (error = {errorLargeRange})");
+            Assert.True(Math.Abs(errorLargeRange) < 0.05, $"was {averageLargeRange} (error = {errorLargeRange})");
         }
 
         [Fact]
@@ -199,7 +199,7 @@ namespace Medallion
             var random = this.GetRandom();
             var average = Enumerable.Range(0, 20000).Select(_ => random.NextDouble())
                 .Average();
-            Assert.Equal(actual: average, expected: .5, precision: 2);
+            Assert.True(Math.Abs(average - .5) < .005, $"was {average}");
         }
 
         [Fact]
