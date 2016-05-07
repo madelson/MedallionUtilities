@@ -101,29 +101,32 @@
             
             var upperBits = random.Next30OrFewerBits(bits - 16) << 16;
             var lowerBits = random.Next30OrFewerBits(16);
-            return upperBits + lowerBits;
+            return upperBits | lowerBits;
         }
         
         private static int Next30OrFewerBits(this Random random, int bits)
         {
-            // a range of bits is [0, 2^bits - 1)
-            var maxValue = (1 << bits) - 1;
+            // a range of bits is [0, 2^bits)
+            var maxValue = 1 << bits;
 
-            int sample, val;
-            do
-            {
-                // take a sample [0, 2^31 - 2)
-                sample = random.Next();
-                // derive a value in [0, maxValue)
-                val = sample % (maxValue + 1);
-            }
-            // rejects biased values. For example, if Next() returned [0, 10)
-            // and we were looking for a number in [0, 4), we'd reject samples of
-            // 8 or 9 to ensure that each number in the desired range has an even chance
-            // of turning up
-            while (sample - val + (maxValue - 1) < 0);
+            // Next() returns a value in [0, 2^31 - 1)
+            const int NextMaxValue = int.MaxValue;
 
-            return val;
+            // thus to avoid bias, we must throw away values at the top of the range.
+            // E. g. if Next() returned [0, 10) we were looking to produce [0, 4), we'd
+            // throw away samples of 8 or 9 since these would bias us towards results of 
+            // 0 and 1 respectively.
+            // NOTE: since maxValue is always a power of 2, this is equivalent to
+            // NextMaxValue - (NextMaxValue % maxValue)
+            var firstBiasedValue = NextMaxValue - (NextMaxValue & (maxValue - 1));
+
+            int sample;
+            do { sample = random.Next(); }
+            while (sample >= firstBiasedValue);
+
+            // NOTE: because maxValue is a power of 2, this is equivalent to 
+            // sample % maxValue
+            return sample & (maxValue - 1);
         }
         #endregion
 
