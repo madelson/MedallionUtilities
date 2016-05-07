@@ -85,9 +85,18 @@ namespace Medallion.Tools
             var syntaxRoot = document.GetSyntaxRootAsync().Result;
             var cSharp6Rewriter = new CSharp6SyntaxRewriter(document.GetSemanticModelAsync().Result);
             var withoutCSharp6Constructs = cSharp6Rewriter.Visit(syntaxRoot);
+            // this is necessary to ensure parseability since it will fix things like a preprocessor directive not being
+            // the first non-whitespace token on a new line
+            var formattedWithoutCSharp6Constructs = Formatter.Format(withoutCSharp6Constructs, new AdhocWorkspace());
 
             // verify
-            var cSharp5Parsed = SyntaxFactory.ParseCompilationUnit(withoutCSharp6Constructs.ToFullString(), options: new CSharpParseOptions(LanguageVersion.CSharp5));
+            var withoutCSharp6ConstructsText = formattedWithoutCSharp6Constructs.ToFullString();
+            var cSharp6Parsed = SyntaxFactory.ParseCompilationUnit(withoutCSharp6ConstructsText);
+            if (cSharp6Parsed.ContainsDiagnostics)
+            {
+                throw new InvalidOperationException($"Invalid code produced by C#6 rewriter: {string.Join(", ", cSharp6Parsed.GetDiagnostics().Select(d => d.ToString()))}");
+            }
+            var cSharp5Parsed = SyntaxFactory.ParseCompilationUnit(withoutCSharp6ConstructsText, options: new CSharpParseOptions(LanguageVersion.CSharp5));
             if (cSharp5Parsed.ContainsDiagnostics)
             {
                 throw new FormatException($"Code contained C#6 constructs with no supported translation: {string.Join(", ", cSharp5Parsed.GetDiagnostics().Select(d => d.ToString()))}");
@@ -105,9 +114,10 @@ namespace Medallion.Tools
                 conditionalCompilationSymbolBaseName: this.project.Name.Replace(".", "_"),
                 baseNamespace: rootNamespace
             );
-            var rewritten = generalSyntaxRewriter.Visit(withoutCSharp6Constructs);
+            var rewritten = generalSyntaxRewriter.Visit(formattedWithoutCSharp6Constructs);
+            var formattedRewritten = Formatter.Format(rewritten, new AdhocWorkspace());
 
-            return rewritten;
+            return formattedRewritten;
         }
 
         void IDisposable.Dispose()
