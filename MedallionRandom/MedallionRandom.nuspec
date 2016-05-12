@@ -11,7 +11,7 @@
     <description>$description$</description>
     <releaseNotes>Initial release</releaseNotes>
     <copyright>Copyright 2016</copyright>
-    <tags>random rng</tags>
+    <tags>random rng utility gaussian distribution</tags>
     <dependencies>
     </dependencies>
   </metadata>
