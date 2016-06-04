@@ -6,22 +6,40 @@ using System.Threading.Tasks;
 
 namespace Playground.CommandLineInterface
 {
-    public class CommandSyntax
+    public sealed class CommandSyntax
     {
-        internal CommandSyntax(IEnumerable<SubCommandSyntax> subCommands, IEnumerable<ArgumentSyntax> arguments)
+        internal CommandSyntax(IEnumerable<ArgumentSyntax> arguments, IEnumerable<SubCommandSyntax> subCommands)
         {
-            if (subCommands == null) { throw new ArgumentNullException(nameof(subCommands)); }
             if (arguments == null) { throw new ArgumentNullException(nameof(arguments)); }
-
-            this.SubCommands = subCommands.ToArray();
-            if (this.SubCommands.Contains(null)) { throw new ArgumentNullException("must all be non-null", nameof(subCommands)); }
+            if (subCommands == null) { throw new ArgumentNullException(nameof(subCommands)); }
 
             this.Arguments = arguments.ToArray();
             if (this.Arguments.Contains(null)) { throw new ArgumentNullException("must all be non-null", nameof(arguments)); }
-            // todo validate optional positioning 
+            var positionalArguments = this.Arguments.Where(a => a.Name == null).ToArray();
+            if (positionalArguments.Length > 1)
+            {
+                if ((
+                        !positionalArguments[0].Required
+                        && positionalArguments.SkipWhile(p => !p.Required).Any(p => !p.Required)
+                    )
+                    ||
+                    (
+                        !positionalArguments[positionalArguments.Length - 1].Required
+                        && positionalArguments.Reverse().SkipWhile(p => !p.Required).Any(p => !p.Required)
+                    ))
+                {
+                    throw new ArgumentException(
+                        "optional positional arguments must either all appear at the end or all appear at the beginning of the positional argument list",
+                        nameof(arguments)
+                    );
+                }
+            }
+
+            this.SubCommands = subCommands.ToArray();
+            if (this.SubCommands.Contains(null)) { throw new ArgumentNullException("must all be non-null", nameof(subCommands)); }
         }
 
-        public IReadOnlyList<SubCommandSyntax> SubCommands { get; }
         public IReadOnlyList<ArgumentSyntax> Arguments { get; }
+        public IReadOnlyList<SubCommandSyntax> SubCommands { get; }
     }
 }

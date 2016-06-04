@@ -20,7 +20,7 @@ namespace Playground.CommandLineInterface
             => new ParsedArgumentSyntax<T>(required, name: null, parser: parser, validator: validator);
 
         public static ArgumentSyntax<string> PositionalArgument(Action<string> validator = null, bool required = true)
-            => PositionalArgument<string>(validator: validator, required: required); 
+            => PositionalArgument<string>(validator: validator, required: required);
 
         public static ArgumentSyntax<T> NamedArgument<T>(
             string name,
@@ -38,6 +38,17 @@ namespace Playground.CommandLineInterface
             Action<string> validator = null,
             bool required = false)
             => NamedArgument<string>(name, validator: validator, required: required);
+
+        public static CommandSyntax Command(
+            IEnumerable<ArgumentSyntax> arguments = null,
+            IEnumerable<SubCommandSyntax> subCommands = null)
+            => new CommandSyntax(arguments ?? Enumerable.Empty<ArgumentSyntax>(), subCommands ?? Enumerable.Empty<SubCommandSyntax>());
+
+        public static SubCommandSyntax SubCommand(
+            string name,
+            IEnumerable<ArgumentSyntax> arguments = null,
+            IEnumerable<SubCommandSyntax> subCommands = null)
+            => new SubCommandSyntax(name, Command(arguments, subCommands));
 
         private sealed class FlagArgumentSyntax : ArgumentSyntax<bool>
         {
