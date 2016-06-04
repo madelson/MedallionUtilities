@@ -26,6 +26,7 @@ namespace Medallion.Collections
         }
 
         private static IEnumerable<T> AlongIterator<T>(T root, Func<T, T> next)
+            where T : class
         {
             for (var node = root; node != null; node = next(node))
             {
@@ -114,7 +115,7 @@ namespace Medallion.Collections
                         // otherwise, cleanup the empty enumerator and...
                         childrenEnumerator.Dispose();
 
-                        // search up the stack for an enumerator with elements left
+                        // ...search up the stack for an enumerator with elements left
                         while (true)
                         {
                             if (stack.Count == 0)
