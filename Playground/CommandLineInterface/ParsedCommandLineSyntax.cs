@@ -10,7 +10,7 @@ namespace Playground.CommandLineInterface
     {
         internal ParsedCommandLineSyntax(ArraySegment<string> tokens)       
         {
-            if (tokens.Array == null) { throw new ArgumentNullException("array must not be null", nameof(tokens)); }
+            if (tokens.Array == null) { throw new ArgumentNullException("array must be non-null", nameof(tokens)); }
 
             this.Tokens = tokens;
         }
