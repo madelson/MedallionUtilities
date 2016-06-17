@@ -14,31 +14,82 @@ namespace Playground.CommandLineInterface.DataAnnotations
     internal sealed class DataAnnotationsCommandLineParser
     {
         private readonly Type type;
+        private readonly IReadOnlyDictionary<PropertyDescriptor, ArgumentSyntax> argumentMapping;
+        private readonly IReadOnlyDictionary<PropertyDescriptor, DataAnnotationsCommandLineParser> subCommandMapping;
 
         public DataAnnotationsCommandLineParser(Type type)
+            : this(type, subCommandName: null, subCommandDescription: null)
+        {
+        }
+
+        private DataAnnotationsCommandLineParser(Type type, string subCommandName, string subCommandDescription)
         {
             if (type == null) { throw new ArgumentNullException(nameof(type)); }
             if (!type.IsClass || type.IsAbstract) { throw new ArgumentException("must be a non-abstract class", nameof(type)); }
 
             this.type = type;
 
-            var argumentsAndSubCommands = GetArgumentsAndSubCommands(this.type);
-            var nameAndDescription = GetNameAndDescription(this.type);
-            this.Syntax = CommandLineSyntax.Command(
-                nameAndDescription.Item1,
-                nameAndDescription.Item2,
-                argumentsAndSubCommands.Item1,
-                argumentsAndSubCommands.Item2
-            );
+            CommandSyntax syntax;
+            CreateSyntax(type, subCommandName, subCommandDescription, out syntax, out this.argumentMapping, out this.subCommandMapping);
         }
 
         public CommandSyntax Syntax { get; }
+
+        private static void CreateSyntax(
+            Type type, 
+            string subCommandName,
+            string subCommandDescription,
+            out CommandSyntax syntax, 
+            out IReadOnlyDictionary<PropertyDescriptor, ArgumentSyntax> argumentMapping, 
+            out IReadOnlyDictionary<PropertyDescriptor, DataAnnotationsCommandLineParser> subCommandMapping)
+        {
+            var parsedProperties = TypeDescriptor.GetProperties(type)
+                .Cast<PropertyDescriptor>()
+                .Where(p => !p.IsReadOnly)
+                .Select(p => new { prop = p, parseResult = ParseProperty(p) })
+                .Where(t => t.parseResult != null)
+                .Select(t => new { t.prop, parsed = t.parseResult.Item1, order = t.parseResult.Item2 })
+                .ToArray();
+
+            var arguments = parsedProperties.OrderBy(t => t.order ?? long.MaxValue)
+                .Select(t => t.parsed)
+                .OfType<ArgumentSyntax>();
+            var subCommands = parsedProperties.Select(t => t.parsed)
+                .OfType<DataAnnotationsCommandLineParser>()
+                .Select(p => (SubCommandSyntax)p.Syntax);
+
+            if (subCommandName != null)
+            {
+                syntax = CommandLineSyntax.SubCommand(
+                    subCommandName,
+                    subCommandDescription,
+                    arguments,
+                    subCommands
+                );
+            }
+            else
+            {
+                var nameAndDescription = GetNameAndDescription(type);
+                syntax = CommandLineSyntax.Command(
+                    nameAndDescription.Item1,
+                    nameAndDescription.Item2,
+                    arguments,
+                    subCommands
+                );
+            }
+
+            argumentMapping = parsedProperties.Where(t => t.parsed is ArgumentSyntax)
+                .ToDictionary(t => t.prop, t => (ArgumentSyntax)t.parsed);
+            subCommandMapping = parsedProperties.Where(t => t.parsed is DataAnnotationsCommandLineParser)
+                .ToDictionary(t => t.prop, t => (DataAnnotationsCommandLineParser)t.parsed);
+        }
 
         private static Tuple<IEnumerable<ArgumentSyntax>, IEnumerable<SubCommandSyntax>> GetArgumentsAndSubCommands(Type type)
         {
             var properties = TypeDescriptor.GetProperties(type);
             var parsedProperties = properties.Cast<PropertyDescriptor>()
-                .Select(ToSyntaxAndPosition)
+                .Where(p => !p.IsReadOnly)
+                .Select(ParseProperty)
                 .Where(t => t != null)
                 .ToArray();
             return Tuple.Create(
@@ -56,7 +107,7 @@ namespace Playground.CommandLineInterface.DataAnnotations
             );
         }
 
-        private static Tuple<CommandLineElementSyntax, int?> ToSyntaxAndPosition(PropertyDescriptor property)
+        private static Tuple<object, int?> ParseProperty(PropertyDescriptor property)
         {
             if (property.Attributes[typeof(NotMappedAttribute)] != null) { return null; }
 
@@ -100,17 +151,13 @@ namespace Playground.CommandLineInterface.DataAnnotations
 
                 if (isSubCommand)
                 {
-                    var argumentsAndSubCommands = GetArgumentsAndSubCommands(property.PropertyType);
-                    var syntax = CommandLineSyntax.SubCommand(
-                        name,
-                        specifiedDescription,
-                        argumentsAndSubCommands.Item1,
-                        argumentsAndSubCommands.Item2
+                    return new Tuple<object, int?>(
+                        new DataAnnotationsCommandLineParser(property.PropertyType, subCommandName: name, subCommandDescription: specifiedDescription),
+                        null
                     );
-                    return new Tuple<CommandLineElementSyntax, int?>(syntax, null);
                 }
 
-                return (Tuple<CommandLineElementSyntax, int?>)typeof(DataAnnotationsCommandLineParser)
+                return (Tuple<object, int?>)typeof(DataAnnotationsCommandLineParser)
                     .GetMethod(nameof(ToArgumentSyntaxAndPosition), BindingFlags.NonPublic | BindingFlags.Static)
                     .Invoke(null, new object[] { name, shortName, description, order, required, property });
             }
@@ -120,7 +167,7 @@ namespace Playground.CommandLineInterface.DataAnnotations
             }
         }
 
-        private static Tuple<CommandLineElementSyntax, int?> ToArgumentSyntaxAndPosition<T>(
+        private static Tuple<object, int?> ToArgumentSyntaxAndPosition<T>(
             string name,
             string shortName,
             string description,
@@ -130,7 +177,7 @@ namespace Playground.CommandLineInterface.DataAnnotations
         {
             if (!required && !order.HasValue && typeof(T) == typeof(bool))
             {
-                return Tuple.Create<CommandLineElementSyntax, int?>(
+                return Tuple.Create<object, int?>(
                     CommandLineSyntax.FlagArgument(name, shortName, description),
                     null
                 );
@@ -140,7 +187,7 @@ namespace Playground.CommandLineInterface.DataAnnotations
                 ? new Func<string, T>(s => (T)property.Converter.ConvertFromInvariantString(s))
                 : null;
 
-            return Tuple.Create<CommandLineElementSyntax, int?>(
+            return Tuple.Create<object, int?>(
                 order.HasValue
                     ? CommandLineSyntax.PositionalArgument(name: name, description: description, required: required, parser: parser)
                     : CommandLineSyntax.NamedArgument(name: name, shortName: shortName, description: description, required: required, parser: parser),
