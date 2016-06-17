@@ -6,18 +6,15 @@ using System.Threading.Tasks;
 
 namespace Playground.CommandLineInterface
 {
-    public sealed class SubCommandSyntax : CommandLineSyntax
+    public sealed class SubCommandSyntax : CommandSyntax
     {
-        public SubCommandSyntax(string name, CommandSyntax command)
+        public SubCommandSyntax(
+            string name,
+            string description,
+            IEnumerable<ArgumentSyntax> arguments,
+            IEnumerable<SubCommandSyntax> subCommands)
+            : base(name, description, arguments, subCommands)
         {
-            if (string.IsNullOrEmpty(this.Name)) { throw new ArgumentException("must not be null or empty", nameof(name)); }
-            if (command == null) { throw new ArgumentNullException(nameof(command)); }
-
-            this.Name = name;
-            this.Command = command;
         }
-
-        public string Name { get; }
-        public new CommandSyntax Command { get; }
     }
 }

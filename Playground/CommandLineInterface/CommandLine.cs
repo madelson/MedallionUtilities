@@ -9,7 +9,7 @@ namespace Playground.CommandLineInterface
 {
     public static class CommandLine
     {
-        public static ParsedCommandSyntax Parse(string[] commandLine, CommandSyntax syntax)
+        public static ParsedCommand Parse(string[] commandLine, CommandSyntax syntax)
         {
             if (commandLine == null) { throw new ArgumentNullException(nameof(commandLine)); }
             if (commandLine.Contains(null)) { throw new ArgumentNullException("must all be non-null", nameof(commandLine)); }
@@ -18,13 +18,13 @@ namespace Playground.CommandLineInterface
             return ParseCommand(new ArraySegment<string>(commandLine), syntax);
         }
 
-        private static ParsedCommandSyntax ParseCommand(ArraySegment<string> tokens, CommandSyntax syntax)
+        private static ParsedCommand ParseCommand(ArraySegment<string> tokens, CommandSyntax syntax)
         {
             var namedArguments = syntax.Arguments.Where(a => a.Name != null).ToArray();
             var positionalArguments = syntax.Arguments.Where(a => a.Name == null).ToArray();
 
-            ParsedSubCommandSyntax parsedSubCommand = null;
-            var parsedNamedArgments = new List<ParsedArgumentSyntax>();
+            ParsedSubCommand parsedSubCommand = null;
+            var parsedNamedArgments = new List<ParsedArgument>();
             var positionalArgumentTokens = new List<ArraySegment<string>>();
 
             var isLookingForSubCommand = syntax.SubCommands.Any();
@@ -40,7 +40,7 @@ namespace Playground.CommandLineInterface
                 }
 
                 // next, see if we found a named argument
-                ParsedArgumentSyntax parsedArgument;
+                ParsedArgument parsedArgument;
                 if (TryParseAny(tokens.SubSegment(i), TryParseNamedArgument, namedArguments, out parsedArgument))
                 {
                     parsedNamedArgments.Add(parsedArgument);
@@ -93,7 +93,7 @@ namespace Playground.CommandLineInterface
             var parsedArguments = parsedNamedArgments.Concat(parsedPositionalArguments)
                 .OrderBy(a => a.Tokens.Offset);
 
-            return new ParsedCommandSyntax(tokens, syntax, parsedSubCommand, parsedArguments);
+            return new ParsedCommand(tokens, syntax, parsedSubCommand, parsedArguments);
         }
 
         private delegate bool SyntaxParser<TSyntax, TParsed>(ArraySegment<string> tokens, TSyntax syntax, out TParsed parsed);
@@ -109,7 +109,7 @@ namespace Playground.CommandLineInterface
             return false;
         }
 
-        private static bool TryParseSubCommand(ArraySegment<string> tokens, SubCommandSyntax syntax, out ParsedSubCommandSyntax parsed)
+        private static bool TryParseSubCommand(ArraySegment<string> tokens, SubCommandSyntax syntax, out ParsedSubCommand parsed)
         {
             // todo case
             if (tokens.Count == 0 || tokens.First() != syntax.Name)
@@ -119,21 +119,21 @@ namespace Playground.CommandLineInterface
             }
 
             var parsedCommand = ParseCommand(tokens.SubSegment(1), syntax.Command);
-            parsed = new ParsedSubCommandSyntax(tokens, syntax, parsedCommand);
+            parsed = new ParsedSubCommand(tokens, syntax, parsedCommand);
             return true;
         }
 
-        private static bool TryParseNamedArgument(ArraySegment<string> tokens, ArgumentSyntax syntax, out ParsedArgumentSyntax parsed)
+        private static bool TryParseNamedArgument(ArraySegment<string> tokens, ArgumentSyntax syntax, out ParsedArgument parsed)
         {
             throw new NotImplementedException();
         }
 
-        private static ParsedArgumentSyntax ParsePositionalArgument(ArraySegment<string> tokens, ArgumentSyntax syntax)
+        private static ParsedArgument ParsePositionalArgument(ArraySegment<string> tokens, ArgumentSyntax syntax)
         {
             if (tokens.Count != 1) { throw new InvalidOperationException("should never get here"); }
 
             var value = ParseAndValidateValue(tokens, syntax);
-            return new ParsedArgumentSyntax(tokens, syntax, value);
+            return new ParsedArgument(tokens, syntax, value);
         }
 
         private static object ParseAndValidateValue(ArraySegment<string> token, ArgumentSyntax syntax)

@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace Playground.CommandLineInterface
 {
-    public sealed class ParsedCommandSyntax : ParsedCommandLineSyntax
+    public sealed class ParsedCommand : ParsedCommandLineElement
     {
-        internal ParsedCommandSyntax(ArraySegment<string> tokens, CommandSyntax command, ParsedSubCommandSyntax subCommand, IEnumerable<ParsedArgumentSyntax> arguments)
+        internal ParsedCommand(ArraySegment<string> tokens, CommandSyntax command, ParsedSubCommand subCommand, IEnumerable<ParsedArgument> arguments)
             : base(tokens)
         {
             if (command == null) { throw new ArgumentNullException(nameof(command)); }
@@ -16,11 +16,11 @@ namespace Playground.CommandLineInterface
 
             this.Command = command;
             this.SubCommand = subCommand;
-            this.Arguments = new ParsedArgumentSyntaxCollection(command, arguments);
+            this.Arguments = new ParsedArgumentCollection(command, arguments);
         }
 
         public CommandSyntax Command { get; }
-        public ParsedSubCommandSyntax SubCommand { get; }
-        public ParsedArgumentSyntaxCollection Arguments { get; }
+        public ParsedSubCommand SubCommand { get; }
+        public ParsedArgumentCollection Arguments { get; }
     }
 }

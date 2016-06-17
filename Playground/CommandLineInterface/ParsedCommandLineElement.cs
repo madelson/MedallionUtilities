@@ -6,15 +6,18 @@ using System.Threading.Tasks;
 
 namespace Playground.CommandLineInterface
 {
-    public abstract class ParsedCommandLineSyntax
+    public abstract class ParsedCommandLineElement
     {
-        internal ParsedCommandLineSyntax(ArraySegment<string> tokens)       
+        internal ParsedCommandLineElement(ArraySegment<string> tokens, CommandLineSyntax syntax)
         {
             if (tokens.Array == null) { throw new ArgumentNullException("array must be non-null", nameof(tokens)); }
+            if (syntax == null) { throw new ArgumentNullException(nameof(syntax)); }
 
             this.Tokens = tokens;
+            this.Syntax = syntax;
         }
 
         public ArraySegment<string> Tokens { get; }
+        public CommandLineSyntax Syntax { get; }
     }
 }

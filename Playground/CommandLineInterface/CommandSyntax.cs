@@ -6,9 +6,14 @@ using System.Threading.Tasks;
 
 namespace Playground.CommandLineInterface
 {
-    public sealed class CommandSyntax
+    public abstract class CommandSyntax : CommandLineElementSyntax
     {
-        internal CommandSyntax(IEnumerable<ArgumentSyntax> arguments, IEnumerable<SubCommandSyntax> subCommands)
+        internal CommandSyntax(
+            string name,
+            string description,
+            IEnumerable<ArgumentSyntax> arguments, 
+            IEnumerable<SubCommandSyntax> subCommands)
+            : base(name, description)s
         {
             if (arguments == null) { throw new ArgumentNullException(nameof(arguments)); }
             if (subCommands == null) { throw new ArgumentNullException(nameof(subCommands)); }

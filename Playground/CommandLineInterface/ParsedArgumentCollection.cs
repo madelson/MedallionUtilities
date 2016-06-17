@@ -7,12 +7,12 @@ using System.Threading.Tasks;
 
 namespace Playground.CommandLineInterface
 {
-    public sealed class ParsedArgumentSyntaxCollection : IReadOnlyCollection<ParsedArgumentSyntax>
+    public sealed class ParsedArgumentCollection : IReadOnlyCollection<ParsedArgument>
     {
         private readonly CommandSyntax command;
-        private readonly IReadOnlyList<ParsedArgumentSyntax> arguments;
+        private readonly IReadOnlyList<ParsedArgument> arguments;
 
-        internal ParsedArgumentSyntaxCollection(CommandSyntax command, IEnumerable<ParsedArgumentSyntax> arguments)
+        internal ParsedArgumentCollection(CommandSyntax command, IEnumerable<ParsedArgument> arguments)
         {
             if (command == null) { throw new ArgumentNullException(nameof(command)); }
             if (arguments == null) { throw new ArgumentNullException(nameof(arguments)); }
@@ -28,7 +28,7 @@ namespace Playground.CommandLineInterface
         }
 
         public int Count => this.arguments.Count;
-        public IEnumerator<ParsedArgumentSyntax> GetEnumerator() => this.arguments.GetEnumerator();
+        public IEnumerator<ParsedArgument> GetEnumerator() => this.arguments.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
         public bool TryGetValue(ArgumentSyntax argument, out object value) => TryGetValue(Find(argument), out value);
@@ -36,7 +36,7 @@ namespace Playground.CommandLineInterface
         public bool TryGetValue(string name, out object value) => TryGetValue(Find(name), out value);
         public bool TryGetValue(int positionalIndex, out object value) => TryGetValue(Find(positionalIndex), out value);
 
-        private bool TryGetValue<T>(ParsedArgumentSyntax parsedArgument, out T value)
+        private bool TryGetValue<T>(ParsedArgument parsedArgument, out T value)
         {
             if (parsedArgument != null)
             {
@@ -53,7 +53,7 @@ namespace Playground.CommandLineInterface
         public object this[string name] => GetValue<object>(Find(name));
         public object GetValue(int positionalIndex) => GetValue<object>(Find(positionalIndex));
 
-        private T GetValue<T>(ParsedArgumentSyntax parsedArgument)
+        private T GetValue<T>(ParsedArgument parsedArgument)
         {
             if (parsedArgument == null) { throw new KeyNotFoundException("no value was provided for the argument"); }
 
@@ -65,9 +65,9 @@ namespace Playground.CommandLineInterface
         public object GetValueOrDefault(string name) => GetValueOrDefault<object>(Find(name));
         public object GetValueOrDefault(int positionalIndex) => GetValueOrDefault<object>(Find(positionalIndex));
 
-        private T GetValueOrDefault<T>(ParsedArgumentSyntax parsedArgument) => parsedArgument != null ? (T)parsedArgument.Value : default(T);
+        private T GetValueOrDefault<T>(ParsedArgument parsedArgument) => parsedArgument != null ? (T)parsedArgument.Value : default(T);
 
-        private ParsedArgumentSyntax Find(ArgumentSyntax argument)
+        private ParsedArgument Find(ArgumentSyntax argument)
         {
             if (argument == null) { throw new ArgumentNullException(nameof(argument)); }
 
@@ -82,7 +82,7 @@ namespace Playground.CommandLineInterface
             return null;
         }
 
-        private ParsedArgumentSyntax Find(string name)
+        private ParsedArgument Find(string name)
         {
             if (name == null) { throw new ArgumentNullException(nameof(name)); }
 
@@ -99,7 +99,7 @@ namespace Playground.CommandLineInterface
             return null;
         }
 
-        private ParsedArgumentSyntax Find(int positionalIndex)
+        private ParsedArgument Find(int positionalIndex)
         {
             if (positionalIndex < 0) { throw new ArgumentOutOfRangeException(nameof(positionalIndex), positionalIndex, "must be non-negative"); }
 
