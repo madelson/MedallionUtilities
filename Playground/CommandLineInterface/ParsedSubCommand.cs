@@ -8,18 +8,17 @@ namespace Playground.CommandLineInterface
 {
     public sealed class ParsedSubCommand : ParsedCommandLineElement
     {
-        internal ParsedSubCommand(ArraySegment<string> tokens, SubCommandSyntax subCommand, ParsedCommand command)
-            : base(tokens)
+        internal ParsedSubCommand(ArraySegment<string> tokens, SubCommandSyntax syntax, ParsedSubCommand subCommand, IEnumerable<ParsedArgument> arguments)
+            : base(tokens, syntax)
         {
-            if (subCommand == null) { throw new ArgumentNullException(nameof(subCommand)); }
-            if (command == null) { throw new ArgumentNullException(nameof(command)); }
-            if (subCommand.Command != command.Command) { throw new ArgumentException($"the {nameof(subCommand)} and {nameof(command)} must be associated", nameof(command)); }
+            if (arguments == null) { throw new ArgumentNullException(nameof(arguments)); }
 
             this.SubCommand = subCommand;
-            this.Command = command;
+            this.Arguments = new ParsedArgumentCollection(syntax, arguments);
         }
 
-        public SubCommandSyntax SubCommand { get; }
-        public ParsedCommand Command { get; }
+        public new SubCommandSyntax Syntax => (SubCommandSyntax)base.Syntax;
+        public ParsedSubCommand SubCommand { get; }
+        public ParsedArgumentCollection Arguments { get; }
     }
 }

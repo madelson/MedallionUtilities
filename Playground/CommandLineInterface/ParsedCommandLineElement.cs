@@ -8,7 +8,7 @@ namespace Playground.CommandLineInterface
 {
     public abstract class ParsedCommandLineElement
     {
-        internal ParsedCommandLineElement(ArraySegment<string> tokens, CommandLineSyntax syntax)
+        internal ParsedCommandLineElement(ArraySegment<string> tokens, CommandLineElementSyntax syntax)
         {
             if (tokens.Array == null) { throw new ArgumentNullException("array must be non-null", nameof(tokens)); }
             if (syntax == null) { throw new ArgumentNullException(nameof(syntax)); }
@@ -18,6 +18,6 @@ namespace Playground.CommandLineInterface
         }
 
         public ArraySegment<string> Tokens { get; }
-        public CommandLineSyntax Syntax { get; }
+        public CommandLineElementSyntax Syntax { get; }
     }
 }

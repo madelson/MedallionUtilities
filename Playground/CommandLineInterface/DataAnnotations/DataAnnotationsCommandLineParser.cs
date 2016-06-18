@@ -35,6 +35,7 @@ namespace Playground.CommandLineInterface.DataAnnotations
 
         public CommandSyntax Syntax { get; }
 
+        #region ---- Syntax Mapping ----
         private static void CreateSyntax(
             Type type, 
             string subCommandName,
@@ -194,5 +195,46 @@ namespace Playground.CommandLineInterface.DataAnnotations
                 order
             );
         }
+        #endregion
+
+        #region ---- Object Creation ----
+        public object CreateObject(ParsedCommand command)
+        {
+            if (command.Syntax != this.Syntax) { throw new ArgumentException("the given command's syntax must match that of the parser", nameof(command)); }
+
+            return this.CreateObject(command.SubCommand, command.Arguments);
+        }
+
+        private object CreateObject(ParsedSubCommand subCommand, ParsedArgumentCollection arguments)
+        {
+            // create an instance
+            object result;
+            try { result = Activator.CreateInstance(this.type); }
+            catch (Exception ex) { throw new InvalidOperationException($"Unable to construct command object of type {this.type}", ex); }
+
+            // set all argument properties
+            foreach (var kvp in this.argumentMapping)
+            {
+                object value;
+                if (arguments.TryGetValue(kvp.Value, out value))
+                {
+                    kvp.Key.SetValue(result, value);
+                }
+            }
+
+            // set the sub command property
+            if (subCommand != null)
+            {
+                var subCommandProperty = this.subCommandMapping.Single(kvp => kvp.Value.Syntax == subCommand.Syntax);
+                var value = subCommandProperty.Value.CreateObject(subCommand.SubCommand, subCommand.Arguments);
+                subCommandProperty.Key.SetValue(result, value);
+            }
+
+            return result;
+        }
+        #endregion
+
+        #region ---- Object Validation ----
+        #endregion
     }
 }
