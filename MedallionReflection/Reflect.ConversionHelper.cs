@@ -1,59 +1,47 @@
-﻿using System;
+﻿using Microsoft.CSharp.RuntimeBinder;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Reflection;
-using System.Collections;
+using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
+using CSharpBinder = Microsoft.CSharp.RuntimeBinder.Binder;
 
 namespace Medallion.Reflection
 {
-    using Microsoft.CSharp.RuntimeBinder;
-    using System;
-    using System.Collections;
-    using System.Collections.Concurrent;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Linq.Expressions;
-    using System.Reflection;
-    using System.Runtime.CompilerServices;
-    using System.Text;
-    using System.Text.RegularExpressions;
-    using System.Threading.Tasks;
-    using CSharpBinder = Microsoft.CSharp.RuntimeBinder.Binder;
-
     public static partial class Reflect
     {
         public static bool IsCastableTo(this Type from, Type to)
         {
-            Throw.IfNull(from, "from");
-            Throw.IfNull(to, "to");
+            if (from == null) { throw new ArgumentNullException(nameof(from)); }
+            if (to == null) { throw new ArgumentNullException(nameof(to)); }
 
             return ConversionHelper.CanExplicitCast(from, to);
         }
 
         public static bool IsImplicitlyCastableTo(this Type from, Type to)
         {
-            Throw.IfNull(from, "from");
-            Throw.IfNull(to, "to");
+            if (from == null) { throw new ArgumentNullException(nameof(from)); }
+            if (to == null) { throw new ArgumentNullException(nameof(to)); }
 
             return ConversionHelper.CanImplicitCast(from, to);
         }
 
-        private static class ConversionHelper
+        internal static class ConversionHelper
         {
             #region ---- Explicit casts ----
             public static bool CanExplicitCast(Type from, Type to)
             {
-                //  OR if 
-                // there's an implicit conversion
-                if (from.IsAssignableFrom(to) || CanImplicitCast(from, to))
+                // explicit conversion always works if there's implicit conversion
+                if (CanImplicitCast(from, to))
                 {
                     return true;
                 }
 
+                var key = new KeyValuePair<Type, Type>(from, to);
                 bool cachedValue;
-                if (CastCache.TryGetCachedValue(key, out cachedValue))
+                if (TryGetCachedValue(CastCache, key, out cachedValue))
                 {
                     return cachedValue;
                 }
@@ -72,7 +60,7 @@ namespace Medallion.Reflection
                 {
                     try
                     {
-                        Reflect.GetMethod(() => AttemptExplicitCast<object, object>())
+                        GetMethod(() => AttemptExplicitCast<object, object>())
                             .GetGenericMethodDefinition()
                             .MakeGenericMethod(from, to)
                             .Invoke(null, new object[0]);
@@ -82,7 +70,6 @@ namespace Medallion.Reflection
                     {
                         result = !(
                             ex.InnerException is RuntimeBinderException
-                            // TODO
                             // if the code runs in an environment where this message is localized, we could attempt a known failure first and base the regex on it's message
                             && Regex.IsMatch(ex.InnerException.Message, @"^Cannot convert type '.*' to '.*'$")
                         );
@@ -90,7 +77,7 @@ namespace Medallion.Reflection
                 }
                 else
                 {
-                    // if the from type is nullable, the dynamic logic above won't be of any help because 
+                    // if the from type is null, the dynamic logic above won't be of any help because 
                     // either both types are nullable and thus a runtime cast of null => null will 
                     // succeed OR we get a runtime failure related to the inability to cast null to 
                     // the desired type, which may or may not indicate an actual issue. thus, we do 
@@ -98,7 +85,7 @@ namespace Medallion.Reflection
                     result = CanExplicitCastNonValueType(from, to);
                 }
 
-                CastCache.UpdateCache(key, result);
+                UpdateCache(CastCache, key, result);
                 return result;
             }
 
@@ -183,23 +170,9 @@ namespace Medallion.Reflection
                     return true;
                 }
 
-                CastType cached;
-                if (TryGetCachedCastValue(from, to, out cached))
-                {
-                    return cached == CastType.Implicit;
-                }
-
-                var result = CanImplicitCastNoCache(from, to);
-                UpdateCache(from, to, CastType.NotImplicitCouldBeExplicit);
-
-                return result;
-            }
-
-            private static bool CanImplicitCastNoCache(Type from, Type to)
-            {
                 var key = new KeyValuePair<Type, Type>(from, to);
                 bool cachedValue;
-                if (ImplicitCastCache.TryGetCachedValue(key, out cachedValue))
+                if (TryGetCachedValue(ImplicitCastCache, key, out cachedValue))
                 {
                     return cachedValue;
                 }
@@ -207,7 +180,7 @@ namespace Medallion.Reflection
                 bool result;
                 try
                 {
-                    Reflect.GetMethod(() => AttemptImplicitCast<object, object>())
+                    GetMethod(() => AttemptImplicitCast<object, object>())
                         .GetGenericMethodDefinition()
                         .MakeGenericMethod(from, to)
                         .Invoke(null, new object[0]);
@@ -222,7 +195,7 @@ namespace Medallion.Reflection
                     );
                 }
 
-                ImplicitCastCache.UpdateCache(key, result);
+                UpdateCache(ImplicitCastCache, key, result);
                 return result;
             }
 
@@ -256,24 +229,28 @@ namespace Medallion.Reflection
 
             #region ---- Caching ----
             private const int MaxCacheSize = 5000;
+            private static readonly Dictionary<KeyValuePair<Type, Type>, bool> CastCache = new Dictionary<KeyValuePair<Type, Type>, bool>(),
+                ImplicitCastCache = new Dictionary<KeyValuePair<Type, Type>, bool>();
 
-            private static readonly Dictionary<KeyValuePair<Type, Type>, bool> ImplicitCastCache = new Dictionary<KeyValuePair<Type, Type>, bool>(),
-                ExplicitCastCache = new Dictionary<KeyValuePair<Type, Type>, bool>();
-
-            private static bool TryGetCachedCastValue(Dictionary<KeyValuePair<Type, Type>, bool> cache, Type from, Type to, out bool canCache)
+            private static bool TryGetCachedValue<TKey, TValue>(Dictionary<TKey, TValue> cache, TKey key, out TValue value)
             {
                 ICollection collection = cache;
                 lock (collection.SyncRoot)
                 {
-                    return cache.TryGetValue(new KeyValuePair<Type, Type>(from, to), out canCache);
+                    return cache.TryGetValue(key, out value);
                 }
             }
 
-            private static void UpdateCache(Dictionary<KeyValuePair<Type, Type>, bool> cache, Type from, Type to, bool canCache)
+            private static void UpdateCache<TKey, TValue>(Dictionary<TKey, TValue> cache, TKey key, TValue value)
             {
-                lock (CastCache)
+                ICollection collection = cache;
+                lock (collection.SyncRoot)
                 {
-                    CastCache[new KeyValuePair<Type, Type>(from, to)] = castType;
+                    if (cache.Count > MaxCacheSize)
+                    {
+                        cache.Clear();
+                    }
+                    cache[key] = value;
                 }
             }
             #endregion

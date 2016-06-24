@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -69,23 +70,23 @@ namespace Medallion.Reflection
         }
         #endregion
 
-        #region ---- MemberEquals ----
-        public static bool MemberEquals(this MemberInfo @this, MemberInfo that)
-        {
-            if (@this == that)
-            {
-                return true;
-            }
-            if (@this == null || that == null)
-            {
-                return false;
-            }
-            if (@this.MemberType != that.MemberType || @this.MetadataToken != that.MetadataToken || @this.Module != that.Module)
-            {
-                return false;
-            }
-        }
-        #endregion
+        //#region ---- MemberEquals ----
+        //public static bool MemberEquals(this MemberInfo @this, MemberInfo that)
+        //{
+        //    if (@this == that)
+        //    {
+        //        return true;
+        //    }
+        //    if (@this == null || that == null)
+        //    {
+        //        return false;
+        //    }
+        //    if (@this.MemberType != that.MemberType || @this.MetadataToken != that.MetadataToken || @this.Module != that.Module)
+        //    {
+        //        return false;
+        //    }
+        //}
+        //#endregion
 
         #region ---- Expression Reflection ----
         public static MethodInfo GetMethod(Expression<Action> methodCallExpression)
@@ -136,5 +137,93 @@ namespace Medallion.Reflection
             return (PropertyInfo)property.Member;
         }
         #endregion
+
+        #region ---- GetDelegateType ----
+        public static Type GetDelegateType(this MethodInfo method)
+        {
+            if (method == null) { throw new ArgumentNullException(nameof(method)); }
+
+            var parameters = method.GetParameters();
+            var parameterExpressions = new ParameterExpression[parameters.Length];
+            for (var i = 0; i < parameters.Length; ++i)
+            {
+                parameterExpressions[i] = Expression.Parameter(parameters[i].ParameterType);
+            }
+
+            var lambda = Expression.Lambda(
+                Expression.Call(
+                    method.IsStatic ? null : Expression.Parameter(method.DeclaringType),
+                    method,
+                    parameterExpressions
+                ),
+                parameterExpressions
+            );
+            return lambda.Type;
+        }
+        #endregion
+
+        #region ---- InvokeAndUnwrapException ----
+        public static object InvokeAndUnwrapException(this MethodInfo method, object obj, params object[] parameters)
+        {
+            if (method == null) { throw new ArgumentNullException(nameof(method)); }
+
+            throw new NotImplementedException();
+            //return InternalInvokeAndUnwrapException(method, (m, o, p) => m.Invoke(o, p), obj, parameters);
+        }
+
+        public static object InvokeAndUnwrapException(this ConstructorInfo constructor, params object[] parameters)
+        {
+            if (constructor == null) { throw new ArgumentNullException(nameof(constructor)); }
+
+            throw new NotImplementedException();
+            //return InternalInvokeAndUnwrapException(constructor, (c, _, __, p) => c.Invoke(p), null, parameters);
+        }
+
+        public static object GetValueAndUnwrapException(this PropertyInfo property, object obj)
+        {
+            return GetValueAndUnwrapException(property, obj, index: default(object[]));
+        }
+
+        public static object GetValueAndUnwrapException(this PropertyInfo property, object obj, params object[] index)
+        {
+            if (property == null) { throw new ArgumentNullException(nameof(property)); }
+
+            throw new NotImplementedException();
+            //return InternalInvokeAndUnwrapException(property, (p, o, i) => p.GetValue(o, i), obj, index);
+        }
+
+        public static void SetValueAndUnwrapException(this PropertyInfo property, object obj, object value)
+        {
+
+        }
+
+        public static void SetValueAndUnwrapException(this PropertyInfo property, object obj, object value, object[] index)
+        {
+            if (property == null) { throw new ArgumentNullException(nameof(property)); }
+
+            throw new NotImplementedException();
+            //return InternalInvokeAndUnwrapException(property, (p, o, i, v) => p.SetValue(o, i, v), obj, value, index);
+        } 
+
+        private static object InternalInvokeAndUnwrapException<TMember>(TMember member, Func<TMember, object, object[], object, object> invoke, object obj, object value, object[] parameters)
+            where TMember : MemberInfo
+        {
+            try
+            {
+                throw new NotImplementedException();
+                //return invoke(member, obj, value, parameters);
+            }
+            catch (TargetInvocationException ex)
+            {
+                if (ex.InnerException != null)
+                {
+                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                }
+                throw;
+            }
+        }
+        #endregion
+
+        // TODO invoke with original exception
     }
 }

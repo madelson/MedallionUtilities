@@ -4,12 +4,12 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{694E7988-8E5B-407F-933E-867760941996}</ProjectGuid>
+    <ProjectGuid>{0D9C0773-1F76-44F4-8903-5AAB70830D36}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Medallion</RootNamespace>
-    <AssemblyName>ThrowIf</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <RootNamespace>Playground</RootNamespace>
+    <AssemblyName>Playground</AssemblyName>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -21,8 +21,6 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Debug\ThrowIf.XML</DocumentationFile>
-    <LangVersion>5</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -34,6 +32,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -43,9 +42,32 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AsyncLinq\AsyncEnumerable.cs" />
+    <Compile Include="AsyncLinq\AsyncIteratorBuilder.cs" />
+    <Compile Include="CommandLineInterface\ArgumentStyle.cs" />
+    <Compile Include="CommandLineInterface\ArgumentSyntax.cs" />
+    <Compile Include="CommandLineInterface\CommandLine.cs" />
+    <Compile Include="CommandLineInterface\CommandLineElementSyntax.cs" />
+    <Compile Include="CommandLineInterface\CommandLineParseException.cs" />
+    <Compile Include="CommandLineInterface\CommandLineParser.cs" />
+    <Compile Include="CommandLineInterface\CommandLineSyntax.cs" />
+    <Compile Include="CommandLineInterface\CommandSyntax.cs" />
+    <Compile Include="CommandLineInterface\DataAnnotations\DataAnnotationsCommandLineParser.cs" />
+    <Compile Include="CommandLineInterface\DataAnnotations\SubCommandAttribute.cs" />
+    <Compile Include="CommandLineInterface\EnumDescriptor.cs" />
+    <Compile Include="CommandLineInterface\ParsedArgument.cs" />
+    <Compile Include="CommandLineInterface\ParsedArgumentCollection.cs" />
+    <Compile Include="CommandLineInterface\ParsedCommandLineElement.cs" />
+    <Compile Include="CommandLineInterface\ParsedCommandLine.cs" />
+    <Compile Include="CommandLineInterface\ParsedSubCommand.cs" />
+    <Compile Include="CommandLineInterface\SubCommandSyntax.cs" />
+    <Compile Include="Encoding\Base64Encoding.cs" />
+    <Compile Include="Encoding\HexEncoding.cs" />
+    <Compile Include="Enums\Enum.cs" />
+    <Compile Include="MicroCache\MicroCache.cs" />
+    <Compile Include="Optional\Option.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Throw.cs" />
-    <Compile Include="Throw`.cs" />
+    <Compile Include="SwitchExpression\Switch.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

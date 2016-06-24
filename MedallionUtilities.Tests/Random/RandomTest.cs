@@ -197,7 +197,7 @@ namespace Medallion
         public void TestNextDouble()
         {
             var random = this.GetRandom();
-            var average = Enumerable.Range(0, 20000).Select(_ => random.NextDouble())
+            var average = Enumerable.Range(0, 30000).Select(_ => random.NextDouble())
                 .Average();
             Assert.True(Math.Abs(average - .5) < .005, $"was {average}");
         }

@@ -1,28 +1,28 @@
-﻿using NullGuard;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Diagnostics;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Medallion.Async
 {
-    [NullGuard(ValidationFlags.Arguments)]
     public static class Async
     {
         private static readonly Task<bool> TrueTask = Task.FromResult(true);
 
         #region ---- WaitAsync ----
+        /// <summary>
+        /// Asynchronously waits up to <paramref name="timeout"/> for <paramref name="task"/>
+        /// to complete. The result of the returned <see cref="Task{TResult}"/> indicates whether
+        /// or not the <paramref name="task"/> completed
+        /// </summary>
         public static Task<bool> WaitAsync(this Task task, TimeSpan timeout)
         {
+            if (task == null) { throw new ArgumentNullException(nameof(task)); }
             timeout.AssertIsValidTimeout();
 
             if (task.IsCompleted)
             {
-                return TrueTask;
+                return TrueTask; // hot path
             }
 
             return InternalWaitAsync(task, timeout);
@@ -50,15 +50,32 @@ namespace Medallion.Async
         #endregion
 
         #region ---- TaskCompletionSource ----
+        /// <summary>
+        /// Sets the <paramref name="taskCompletionSource"/> to become canceled when the 
+        /// <paramref name="cancellationToken"/> becomes canceled. Returns the input <paramref name="taskCompletionSource"/>
+        /// </summary>
         public static TaskCompletionSource<TResult> CancelWith<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, CancellationToken cancellationToken)
         {
-            cancellationToken.Register(state => ((TaskCompletionSource<TResult>)state).TrySetCanceled(), state: taskCompletionSource);
+            if (taskCompletionSource == null) { throw new ArgumentNullException(nameof(taskCompletionSource)); }
+
+            if (cancellationToken.CanBeCanceled)
+            {
+                var tokenRegistration = cancellationToken
+                    .Register(state => ((TaskCompletionSource<TResult>)state).TrySetCanceled(), state: taskCompletionSource);
+
+                taskCompletionSource.Task.SynchronousContinueWith((_, state) => ((CancellationTokenRegistration)state).Dispose(), tokenRegistration);
+            }
 
             return taskCompletionSource;
         }
 
+        /// <summary>
+        /// Sets the <paramref name="taskCompletionSource"/> to fault with a <see cref="TimeoutException"/> after
+        /// the given <paramref name="timeout"/>. Returns the input <paramref name="taskCompletionSource"/> 
+        /// </summary>
         public static TaskCompletionSource<TResult> TimeoutAfter<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, TimeSpan timeout)
         {
+            if (taskCompletionSource == null) { throw new ArgumentNullException(nameof(taskCompletionSource)); }
             timeout.AssertIsValidTimeout();
             
             if (timeout != Timeout.InfiniteTimeSpan)
@@ -83,16 +100,35 @@ namespace Medallion.Async
             return taskCompletionSource;
         }
 
+        /// <summary>
+        /// Propagates the completion state of <paramref name="task"/> (<see cref="TaskStatus.Canceled"/>, <see cref="TaskStatus.Faulted"/>, 
+        /// or <see cref="TaskStatus.RanToCompletion"/>) to the given <paramref name="taskCompletionSource"/>. Returns the input 
+        /// <paramref name="taskCompletionSource"/> 
+        /// </summary>
         public static TaskCompletionSource<TResult> CompleteWith<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, Task<TResult> task)
         {
             return taskCompletionSource.InternalCompleteWith(task, (t, _) => t.Result, resultFactoryState: null, continuationOptions: TaskContinuationOptions.ExecuteSynchronously);
         }
 
+        /// <summary>
+        /// Propagates the completion state of <paramref name="task"/> (<see cref="TaskStatus.Canceled"/>, <see cref="TaskStatus.Faulted"/>, 
+        /// or <see cref="TaskStatus.RanToCompletion"/>) to the given <paramref name="taskCompletionSource"/>, using <paramref name="resultFactory"/>
+        /// to generate a <typeparamref name="TResult"/> value from the given <paramref name="task"/>'s result. Returns the input 
+        /// <paramref name="taskCompletionSource"/> 
+        /// </summary>
         public static TaskCompletionSource<TResult> CompleteWith<TResult, TTaskResult>(this TaskCompletionSource<TResult> taskCompletionSource, Task<TTaskResult> task, Func<TTaskResult, TResult> resultFactory)
         {
+            if (resultFactory == null) { throw new ArgumentNullException(nameof(resultFactory)); }
+
             return taskCompletionSource.InternalCompleteWith(task, (t, state) => ((Func<TTaskResult, TResult>)state)(t.Result), resultFactoryState: resultFactory);
         }
 
+        /// <summary>
+        /// Propagates the completion state of <paramref name="task"/> (<see cref="TaskStatus.Canceled"/>, <see cref="TaskStatus.Faulted"/>, 
+        /// or <see cref="TaskStatus.RanToCompletion"/>) to the given <paramref name="taskCompletionSource"/>, optionally using 
+        /// <paramref name="resultFactory"/> to generate a <typeparamref name="TResult"/> value (otherwise the default <typeparamref name="TResult"/>
+        /// value is used. Returns the input <paramref name="taskCompletionSource"/> 
+        /// </summary>
         public static TaskCompletionSource<TResult> CompleteWith<TResult>(this TaskCompletionSource<TResult> taskCompletionSource, Task task, Func<TResult> resultFactory = null)
         {
             var continuationOptions = resultFactory == null 
@@ -111,6 +147,9 @@ namespace Medallion.Async
             TaskScheduler scheduler = null)
             where TTask : Task
         {
+            if (taskCompletionSource == null) { throw new ArgumentNullException(nameof(taskCompletionSource)); }
+            if (task == null) { throw new ArgumentNullException(nameof(task)); }
+
             task.ContinueWith(
                 (t, state) =>
                 {
@@ -130,10 +169,19 @@ namespace Medallion.Async
                     {
                         tupleState.Item1.TrySetCanceled();
                     }
-                    else
+                    else if (!tupleState.Item1.Task.IsCompleted)
                     {
-                        // todo need try-catch here if the result factory fails?
-                        tupleState.Item1.TrySetResult(tupleState.Item2((TTask)t, tupleState.Item3));
+                        // we won't waste time invoking the result factory if the task has already
+                        // completed via some other means
+
+                        try
+                        {
+                            tupleState.Item1.TrySetResult(tupleState.Item2((TTask)t, tupleState.Item3));
+                        }
+                        catch (Exception ex) // if result factory fails, make it an exception
+                        {
+                            tupleState.Item1.TrySetException(ex);
+                        }
                     }
                 },
                 state: Tuple.Create(taskCompletionSource, resultFactory, resultFactoryState),
@@ -146,22 +194,12 @@ namespace Medallion.Async
         }
         #endregion
 
-        #region ---- Synchronous Task ----
-        // todo overloads for Task and with state
-        public static Task<TResult> SynchronousTask<TResult>(Func<TResult> resultFactory, CancellationToken cancellationToken = default(CancellationToken))
+        #region ---- AsTask ---
+        public static Task AsTask(this CancellationToken cancellationToken)
         {
-            var taskBuilder = new TaskCompletionSource<TResult>()
-                .CancelWith(cancellationToken);
-            try
-            {
-                taskBuilder.TrySetResult(resultFactory());
-            }
-            catch (Exception ex)
-            {
-                taskBuilder.TrySetException(ex);
-            }
-
-            return taskBuilder.Task;
+            return new TaskCompletionSource<bool>()
+                .CancelWith(cancellationToken)
+                .Task;
         }
         #endregion
 
@@ -236,6 +274,8 @@ namespace Medallion.Async
         #region ---- Process ----
         public static Task<int> WaitForExitAsync(this Process process, CancellationToken cancellationToken = default(CancellationToken))
         {
+            if (process == null) { throw new ArgumentNullException(nameof(process)); }
+
             process.EnableRaisingEvents = true;
 
             var taskCompletionSource = new TaskCompletionSource<int>()
@@ -249,7 +289,7 @@ namespace Medallion.Async
             }
 
             // on cancellation, kill the process
-            cancellationToken.Register(
+            var tokenRegistration = cancellationToken.Register(
                 state => 
                 {
                     var processState = ((Process)state);
@@ -260,6 +300,7 @@ namespace Medallion.Async
                 },
                 state: process
             );
+            taskCompletionSource.Task.SynchronousContinueWith((_, state) => ((CancellationTokenRegistration)state).Dispose(), tokenRegistration);
 
             return taskCompletionSource.Task;
         }
@@ -268,6 +309,7 @@ namespace Medallion.Async
         #region ---- WaitHandle ----
         public static Task<bool> WaitOneAsync(this WaitHandle waitHandle, TimeSpan? timeout = null, CancellationToken cancellationToken = default(CancellationToken))
         {
+            if (waitHandle == null) { throw new ArgumentNullException(nameof(waitHandle)); }
             if (timeout.HasValue)
             {
                 timeout.Value.AssertIsValidTimeout();
@@ -280,18 +322,20 @@ namespace Medallion.Async
         private static async Task<bool> InternalWaitOneAsync(WaitHandle handle, int timeoutMillis, CancellationToken cancellationToken)
         {
             RegisteredWaitHandle registeredHandle = null;
-            CancellationTokenRegistration tokenRegistration = default(CancellationTokenRegistration);
             try
             {
                 var taskCompletionSource = new TaskCompletionSource<bool>()
                     .CancelWith(cancellationToken);
-                registeredHandle = ThreadPool.RegisterWaitForSingleObject(
-                    handle,
-                    (state, timedOut) => ((TaskCompletionSource<bool>)state).TrySetResult(!timedOut),
-                    state: taskCompletionSource,
-                    millisecondsTimeOutInterval: timeoutMillis,
-                    executeOnlyOnce: true
-                );
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    registeredHandle = ThreadPool.RegisterWaitForSingleObject(
+                        handle,
+                        (state, timedOut) => ((TaskCompletionSource<bool>)state).TrySetResult(!timedOut),
+                        state: taskCompletionSource,
+                        millisecondsTimeOutInterval: timeoutMillis,
+                        executeOnlyOnce: true
+                    );
+                }
                 return await taskCompletionSource.Task.ConfigureAwait(false);
             }
             finally
@@ -304,10 +348,9 @@ namespace Medallion.Async
                     // http://referencesource.microsoft.com/#mscorlib/system/threading/threadpool.cs,065408fc096354fd
                     registeredHandle.Unregister(null);
                 }
-                tokenRegistration.Dispose();
             }
         }
-        #endregion
+        #endregion 
 
         private static Task SynchronousContinueWith(this Task task, Action<Task, object> continuationFunction, object state, CancellationToken cancellationToken = default(CancellationToken), TaskContinuationOptions continuationOptions = TaskContinuationOptions.None)
         {

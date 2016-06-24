@@ -46,11 +46,15 @@ namespace Medallion.IO
         #region ---- Read Methods ----
         protected virtual int InternalRead(byte[] buffer, int offset, int count)
         {
+            if (this.capabilities.CanSyncRead) { throw new InvalidOperationException(nameof(InternalRead) + " must be overriden"); }
+
             return GetResultAndUnwrapException(this.InternalReadAsync(buffer, offset, count, CancellationToken.None));
         }
 
         protected virtual Task<int> InternalReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            if (this.capabilities.CanAsyncRead) { throw new InvalidOperationException(nameof(InternalReadAsync) + " must be overriden"); }
+
             var taskCompletionSource = new TaskCompletionSource<int>();
             try
             {
@@ -69,6 +73,8 @@ namespace Medallion.IO
             this.RequireReadable();
             ValidateBuffer(buffer, offset, count);
 
+            if (count == 0) { return 0; }
+
             return this.InternalRead(buffer, offset, count);
         }
 
@@ -83,6 +89,8 @@ namespace Medallion.IO
                 canceled.SetCanceled();
                 return canceled.Task;
             }
+
+            if (count == 0) { return CompletedZeroTask; }
 
             return this.InternalReadAsync(buffer, offset, count, cancellationToken);
         }
@@ -128,11 +136,15 @@ namespace Medallion.IO
         #region ---- Write Methods ----
         protected virtual void InternalWrite(byte[] buffer, int offset, int count)
         {
+            if (this.capabilities.CanSyncWrite) { throw new InvalidOperationException(nameof(InternalWrite) + " must be overriden"); }
+
             WaitAndUnwrapException(this.InternalWriteAsync(buffer, offset, count, CancellationToken.None));
         }
 
         protected virtual Task InternalWriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            if (this.capabilities.CanAsyncWrite) { throw new InvalidOperationException(nameof(InternalWriteAsync) + " must be overriden"); }
+
             var taskCompletionSource = new TaskCompletionSource<bool>();
             try
             {
@@ -149,11 +161,15 @@ namespace Medallion.IO
 
         protected virtual void InternalFlush()
         {
+            if (this.capabilities.CanSyncWrite) { throw new InvalidOperationException(nameof(InternalFlush) + " must be overriden"); }
+
             WaitAndUnwrapException(this.InternalFlushAsync(CancellationToken.None));
         }
 
         protected virtual Task InternalFlushAsync(CancellationToken cancellationToken)
         {
+            if (this.capabilities.CanAsyncWrite) { throw new InvalidOperationException(nameof(InternalFlushAsync) + " must be overriden"); }
+
             var taskCompletionSource = new TaskCompletionSource<bool>();
             try
             {
@@ -173,6 +189,8 @@ namespace Medallion.IO
             this.RequireWritable();
             ValidateBuffer(buffer, offset, count);
 
+            if (count == 0) { return; }
+
             this.InternalWrite(buffer, offset, count);
         }
 
@@ -187,6 +205,8 @@ namespace Medallion.IO
                 canceled.SetCanceled();
                 return canceled.Task;
             }
+
+            if (count == 0) { return CompletedZeroTask; }
 
             return this.InternalWriteAsync(buffer, offset, count, cancellationToken);
         }
@@ -474,6 +494,10 @@ namespace Medallion.IO
         #endregion
 
         #region ---- Async Helpers ----
+        private static Task<int> cachedCompletedZeroTask;
+
+        private static Task<int> CompletedZeroTask => (cachedCompletedZeroTask ?? (cachedCompletedZeroTask = Task.FromResult(0)));
+
         private static void WaitAndUnwrapException(Task task)
         {
             try

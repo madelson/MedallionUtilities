@@ -189,7 +189,7 @@ namespace Medallion.Enums
 
             public bool Contains(TEnum item)
             {
-                // todo
+                // todo optimize?
                 return Array.IndexOf(this.values, item) >= 0;
             }
 

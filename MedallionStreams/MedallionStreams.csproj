@@ -41,6 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MemoryPipe.cs" />
+    <Compile Include="MemoryPipe2.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="StreamBase.cs" />
     <Compile Include="StreamCapabilities.cs" />

@@ -15,11 +15,6 @@ namespace Medallion
             return new SwitchExpression<TSwitch>(on, comparer ?? EqualityComparer<TSwitch>.Default);
         }
 
-        public static SwitchExpression<TSwitch, TResult> Case<TSwitch, TResult>(TSwitch matches, TResult value)
-        {
-            return SwitchExpression<TSwitch, TResult>.CreateCase(matches, value);
-        }
-
         public static SwitchExpression<TSwitch, TResult> Case<TSwitch, TResult>(TSwitch matches, Func<TSwitch, TResult> valueFactory)
         {
             if (valueFactory == null) { throw new ArgumentNullException(nameof(valueFactory)); }
@@ -59,10 +54,17 @@ namespace Medallion
             internal TSwitch On { get; private set; }
             internal IEqualityComparer<TSwitch> Comparer { get; private set; }
 
-            public SwitchExpression<TSwitch, TResult> WithResultType<TResult>(TResult schema = default(TResult))
+            #region ---- API methods ----
+            public SwitchExpression<TSwitch, TResult> Case<TResult>(TSwitch matches, Func<TSwitch, TResult> valueFactory)
             {
-                return this;
+                return SwitchExpression<TSwitch, TResult>.CreateCase(this) | SwitchExpressions.Case(matches, valueFactory);
             }
+
+            public SwitchExpression<TSwitch, TResult> Case<TType, TResult>(Func<TType, TResult> valueFactory)
+            {
+                return SwitchExpression<TSwitch, TResult>.CreateCase(this) | SwitchExpressions.Case(valueFactory);
+            }
+            #endregion
         }
 
         public struct SwitchExpression<TSwitch, TResult>
@@ -87,12 +89,7 @@ namespace Medallion
                     }
                 }
             }
-
-            internal static SwitchExpression<TSwitch, TResult> CreateCase(TSwitch matches, TResult value)
-            {
-                return new SwitchExpression<TSwitch, TResult> { switchValue = matches, value = value, state = State.Case };
-            }
-
+            
             internal static SwitchExpression<TSwitch, TResult> CreateCase(TSwitch matches, Func<TSwitch, TResult> valueFactory)
             {
                 return new SwitchExpression<TSwitch, TResult> { switchValue = matches, objectState = valueFactory, state = State.CaseWithValueFactory };
@@ -103,9 +100,14 @@ namespace Medallion
                 return new SwitchExpression<TSwitch, TResult> { objectState = @switch, state = State.TypeCase };
             }
 
-            public static implicit operator SwitchExpression<TSwitch, TResult>(SwitchExpression<TSwitch> @switch)
+            internal static SwitchExpression<TSwitch, TResult> CreateCase(SwitchExpression<TSwitch> @switch)
             {
                 return new SwitchExpression<TSwitch, TResult> { switchValue = @switch.On, objectState = @switch.Comparer, state = State.AwaitingMatch };
+            }
+
+            public static implicit operator SwitchExpression<TSwitch, TResult>(BooleanSwitchExpression<TResult> @switch)
+            {
+                return new SwitchExpression<TSwitch, TResult> { objectState = @switch.ValueFactory, state = @switch.Condition ? State.TrueBooleanCase : State.FalseBooleanCase };
             }
 
             public static implicit operator SwitchExpression<TSwitch, TResult>(TypeCaseSwitchExpression<TResult> @switch)
@@ -136,15 +138,16 @@ namespace Medallion
                 
                 switch (second.state)
                 {
-                    case State.Completed: return second;
-                    case State.Case:
-                        return ((IEqualityComparer<TSwitch>)first.objectState).Equals(first.switchValue, second.switchValue)
-                            ? new SwitchExpression<TSwitch, TResult> { value = second.value, state = State.Completed }
-                            : first; // still not matched
+                    case State.Completed:
+                        return second;
                     case State.CaseWithValueFactory:
                         return ((IEqualityComparer<TSwitch>)first.objectState).Equals(first.switchValue, second.switchValue)
                             ? new SwitchExpression<TSwitch, TResult> { value = ((Func<TSwitch, TResult>)second.objectState)(first.switchValue), state = State.Completed }
                             : first; // still not matched
+                    case State.FalseBooleanCase:
+                        return first; // still not matched
+                    case State.TrueBooleanCase:
+                        return new SwitchExpression<TSwitch, TResult> { value = ((Func<TSwitch, TResult>)second.objectState)(first.switchValue), state = State.Completed };
                     case State.TypeCase:
                         TResult typeCaseResult;
                         return ((TypeCaseSwitchExpression<TResult>)second.objectState).TryGetResult(first.switchValue, out typeCaseResult)
@@ -158,12 +161,25 @@ namespace Medallion
             private enum State : byte
             {
                 None,
-                Case,
                 CaseWithValueFactory,
+                TrueBooleanCase,
+                FalseBooleanCase,
                 TypeCase,
                 AwaitingMatch,
                 Completed,
             }
+        }
+
+        public struct BooleanSwitchExpression<TResult>
+        {
+            internal BooleanSwitchExpression(bool condition, Func<TResult> valueFactory)
+            {
+                this.Condition = condition;
+                this.ValueFactory = valueFactory;
+            }
+
+            internal bool Condition { get; private set; }
+            internal Func<TResult> ValueFactory { get; private set; }
         }
 
         public abstract class TypeCaseSwitchExpression<TResult>

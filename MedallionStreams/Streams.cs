@@ -36,6 +36,40 @@ namespace Medallion.IO
             CanSeek = true,
         };
 
+        #region ---- General Helpers ----
+        public static int Read(this Stream stream, byte[] buffer)
+        {
+            if (stream == null) { throw new ArgumentNullException(nameof(stream)); }
+            if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+
+            return stream.Read(buffer, 0, buffer.Length);
+        }
+
+        public static Task<int> ReadAsync(this Stream stream, byte[] buffer, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (stream == null) { throw new ArgumentNullException(nameof(stream)); }
+            if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+
+            return stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+        }
+
+        public static void Write(this Stream stream, byte[] buffer)
+        {
+            if (stream == null) { throw new ArgumentNullException(nameof(stream)); }
+            if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+
+            stream.Write(buffer, 0, buffer.Length);
+        }
+
+        public static Task<int> WriteAsync(this Stream stream, byte[] buffer, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (stream == null) { throw new ArgumentNullException(nameof(stream)); }
+            if (buffer == null) { throw new ArgumentNullException(nameof(buffer)); }
+
+            return stream.WriteAsync(buffer, cancellationToken);
+        }
+        #endregion
+
         #region ---- Take ----
         public static Stream Take(this Stream stream, long count, bool leaveOpen = false)
         {
@@ -313,6 +347,74 @@ namespace Medallion.IO
                     var timeoutMillis = (int)value.TotalMilliseconds;
                     foreach (var stream in this.GetStreams()) { stream.ReadTimeout = timeoutMillis; }
                 }
+            }
+        }
+        #endregion
+
+        #region ---- AutoFlushed ----
+        public static Stream AutoFlushed(this Stream stream, bool leaveOpen = false)
+        {
+            if (stream == null) { throw new ArgumentNullException(nameof(stream)); }
+            if (!stream.CanWrite) { throw new ArgumentException("must be writable", nameof(stream)); }
+            
+            return new AutoFlushedStream(stream, leaveOpen);
+        }
+
+        private sealed class AutoFlushedStream : StreamBase
+        {
+            private static readonly StreamCapabilities BaseCapabilities
+                = new StreamCapabilities { CanAsyncWrite = true, CanSyncWrite = true, CanTimeout = true, CanSeek = true };
+
+            private readonly Stream stream;
+            private readonly bool leaveOpen;
+
+            public AutoFlushedStream(Stream stream, bool leaveOpen)
+                : base(StreamCapabilities.InferFrom(stream).Intersect(BaseCapabilities), BaseCapabilities)
+            {
+                this.stream = stream;
+                this.leaveOpen = leaveOpen;
+            }
+
+            protected override void InternalWrite(byte[] buffer, int offset, int count)
+            {
+                this.stream.Write(buffer, offset, count);
+                this.stream.Flush();
+            }
+
+            protected override async Task InternalWriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                await this.stream.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+                // we don't pass the token here because we don't want the write to go halfway through
+                await this.stream.FlushAsync().ConfigureAwait(false);
+            }
+
+            protected override void InternalFlush() { this.stream.Flush(); }
+
+            protected override Task InternalFlushAsync(CancellationToken cancellationToken) => this.stream.FlushAsync(cancellationToken);
+
+            protected override long InternalGetLength() => this.stream.Length;
+
+            protected override void InternalSetLength(long value)
+            {
+                this.stream.SetLength(value);
+            }
+
+            protected override long InternalGetPosition() => this.stream.Position;
+
+            protected override void InternalSetPosition(long value)
+            {
+                this.stream.Position = value;
+            }
+
+            protected override TimeSpan InternalWriteTimeout
+            {
+                get { return TimeSpan.FromMilliseconds(this.stream.WriteTimeout); }
+                set { this.stream.WriteTimeout = (int)value.TotalMilliseconds; }
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && !this.leaveOpen) { this.stream.Dispose(); }
             }
         }
         #endregion
