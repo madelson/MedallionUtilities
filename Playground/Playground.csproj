@@ -66,6 +66,7 @@
     <Compile Include="Enums\Enum.cs" />
     <Compile Include="MicroCache\MicroCache.cs" />
     <Compile Include="Optional\Option.cs" />
+    <Compile Include="PriorityQueue\PriorityQueue.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SwitchExpression\Switch.cs" />
   </ItemGroup>
