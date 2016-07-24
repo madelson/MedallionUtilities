@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace Playground.CommandLineInterface
 {
-    public sealed class ParsedCommand : ParsedCommandLineElement
+    public sealed class ParsedCommandLine : ParsedCommandLineElement
     {
-        internal ParsedCommand(ArraySegment<string> tokens, CommandLineSyntax syntax, ParsedSubCommand subCommand, IEnumerable<ParsedArgument> arguments)
+        internal ParsedCommandLine(ArraySegment<string> tokens, CommandLineSyntax syntax, ParsedSubCommand subCommand, IEnumerable<ParsedArgument> arguments)
             : base(tokens, syntax)
         {
             if (arguments == null) { throw new ArgumentNullException(nameof(arguments)); }

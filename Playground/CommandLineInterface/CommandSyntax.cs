@@ -13,7 +13,7 @@ namespace Playground.CommandLineInterface
             string description,
             IEnumerable<ArgumentSyntax> arguments, 
             IEnumerable<SubCommandSyntax> subCommands)
-            : base(name, description)s
+            : base(name, description)
         {
             if (arguments == null) { throw new ArgumentNullException(nameof(arguments)); }
             if (subCommands == null) { throw new ArgumentNullException(nameof(subCommands)); }

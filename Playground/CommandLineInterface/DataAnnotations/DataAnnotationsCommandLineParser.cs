@@ -198,7 +198,7 @@ namespace Playground.CommandLineInterface.DataAnnotations
         #endregion
 
         #region ---- Object Creation ----
-        public object CreateObject(ParsedCommand command)
+        public object CreateObject(ParsedCommandLine command)
         {
             if (command.Syntax != this.Syntax) { throw new ArgumentException("the given command's syntax must match that of the parser", nameof(command)); }
 
@@ -235,6 +235,13 @@ namespace Playground.CommandLineInterface.DataAnnotations
         #endregion
 
         #region ---- Object Validation ----
+        public void ValidateObject(object parsed)
+        {
+            if (parsed == null) { throw new ArgumentNullException(nameof(parsed)); }
+            if (!this.type.IsInstanceOfType(parsed)) { throw new ArgumentException($"must be of type {this.type} but was {parsed.GetType()}", nameof(parsed)); }
+
+            Validator.ValidateObject(parsed, new ValidationContext(parsed), validateAllProperties: true);
+        }
         #endregion
     }
 }
