@@ -305,7 +305,11 @@ namespace Medallion.Collections
 
         bool ICollection<T>.IsReadOnly => false;
 
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        /// <summary>
+        /// Equivalent to <see cref="Enqueue(T)"/>. This method is exposed to allow <see cref="PriorityQueue{T}"/>
+        /// to be used with collection initializer syntax
+        /// </summary>
+        [EditorBrowsable(EditorBrowsableState.Never)] // encourage use of Enqueue
         public void Add(T item) => this.Enqueue(item);
 
         /// <summary>

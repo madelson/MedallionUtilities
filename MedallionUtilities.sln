@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.24720.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThrowIf", "ThrowIf\ThrowIf.csproj", "{694E7988-8E5B-407F-933E-867760941996}"
 EndProject
@@ -22,6 +22,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MedallionUtilities.Tests", "MedallionUtilities.Tests\MedallionUtilities.Tests.csproj", "{1DDFC3BE-3D37-4E8E-AB69-F96C6A243F31}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Playground", "Playground\Playground.csproj", "{0D9C0773-1F76-44F4-8903-5AAB70830D36}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MedallionPriorityQueue", "MedallionPriorityQueue\MedallionPriorityQueue.csproj", "{F5808459-2CEB-4CE3-9973-936B7762211D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -69,6 +71,10 @@ Global
 		{0D9C0773-1F76-44F4-8903-5AAB70830D36}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D9C0773-1F76-44F4-8903-5AAB70830D36}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D9C0773-1F76-44F4-8903-5AAB70830D36}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F5808459-2CEB-4CE3-9973-936B7762211D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F5808459-2CEB-4CE3-9973-936B7762211D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F5808459-2CEB-4CE3-9973-936B7762211D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F5808459-2CEB-4CE3-9973-936B7762211D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
