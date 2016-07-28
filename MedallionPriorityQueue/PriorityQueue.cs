@@ -96,10 +96,18 @@ namespace Medallion.Collections
 
             var result = this.heap[0];
             --this.Count;
-            var last = this.heap[this.Count];
-            // don't hold a reference
-            this.heap[this.Count] = default(T);
-            this.Sink(0, last);
+            if (this.Count > 0)
+            {
+                var last = this.heap[this.Count];
+                // don't hold a reference
+                this.heap[this.Count] = default(T);
+                this.Sink(0, last);
+            }
+            else
+            {
+                // don't hold a reference
+                this.heap[0] = default(T);
+            }
 
             ++this.version;
             return result;
@@ -427,7 +435,7 @@ namespace Medallion.Collections
         /// </summary>
         private sealed class DebugView
         {
-            private readonly PriorityQueue<T> queue;
+            private readonly ICollection<T> queue;
 
             public DebugView(PriorityQueue<T> queue)
             {
@@ -437,7 +445,16 @@ namespace Medallion.Collections
             }
 
             [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
-            public T[] Items => this.queue.ToArray();
+            public T[] Items
+            {
+                get
+                {
+                    // note: this can't simply use ToArray() since that gives an error in the debugger
+                    var array = new T[this.queue.Count];
+                    queue.CopyTo(array, arrayIndex: 0);
+                    return array;
+                }
+            }
         }
     }
 }

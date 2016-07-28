@@ -65,6 +65,7 @@
     <Compile Include="Collections\EqualityComparersTest.cs" />
     <Compile Include="Collections\TraverseTest.cs" />
     <Compile Include="Enums\EnumTest.cs" />
+    <Compile Include="PriorityQueue\PriorityQueueTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Random\BirthdayParadoxTest.cs" />
     <Compile Include="Random\JavaRandomCompatibilityTest.cs" />
@@ -84,6 +85,10 @@
     <ProjectReference Include="..\MedallionCollections\MedallionCollections.csproj">
       <Project>{5d0313a2-ffff-4e57-87ce-8c92a6375810}</Project>
       <Name>MedallionCollections</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MedallionPriorityQueue\MedallionPriorityQueue.csproj">
+      <Project>{F5808459-2CEB-4CE3-9973-936B7762211D}</Project>
+      <Name>MedallionPriorityQueue</Name>
     </ProjectReference>
     <ProjectReference Include="..\MedallionRandom\MedallionRandom.csproj">
       <Project>{3d92f2ae-317d-490c-8285-1bdd93a7a0f2}</Project>
