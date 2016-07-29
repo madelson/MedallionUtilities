@@ -9,17 +9,17 @@ Want to use this data structure but don't want an external dependency? Download 
 
 ## API
 
-The PriorityQueue<T> class implements the [ICollection<T>](https://msdn.microsoft.com/en-us/library/92t2ye13.aspx) and [IReadOnlyCollection<T>](https://msdn.microsoft.com/en-us/library/hh881542.aspx) interfaces. It also provides additional methods specific to a priority queue:
+The PriorityQueue\<T> class implements the [ICollection\<T>](https://msdn.microsoft.com/en-us/library/92t2ye13.aspx) and [IReadOnlyCollection\<T>](https://msdn.microsoft.com/en-us/library/hh881542.aspx) interfaces. It also provides additional methods specific to a priority queue:
 
-Queues can be initialized with a custom instance of [IComparer<T>](https://msdn.microsoft.com/en-us/library/8ehhxeaf.aspx) upon construction to determine how elements are sorted (e. g. a reverse comparer could be used to create a max queue instead of a min queue).
+Queues can be initialized with a custom instance of [IComparer\<T>](https://msdn.microsoft.com/en-us/library/8ehhxeaf.aspx) upon construction to determine how elements are sorted (e. g. a reverse comparer could be used to create a max queue instead of a min queue).
 
 | Method | Description |
 | ------ | --------- |
-| Enqueue(T) | Adds an item to the queue (equivalent to [ICollection<T>.Add(T)](https://msdn.microsoft.com/en-us/library/63ywd54z.aspx). Runs in O(log(N)) time. |
-| EnqueueRange(IEnumerable<T>) | Adds a collection of items to the queue. Runs in O(N) time if the input collection size k is larger than the queue or O(k * log(N)) time otherwise |
+| Enqueue(T) | Adds an item to the queue (equivalent to [ICollection\<T>.Add(T)](https://msdn.microsoft.com/en-us/library/63ywd54z.aspx). Runs in O(log(N)) time. |
+| EnqueueRange(IEnumerable\<T>) | Adds a collection of items to the queue. Runs in O(N) time if the input collection size k is larger than the queue or O(k * log(N)) time otherwise |
 | Peek() | Returns the minimum item in the queue without removing it. Runs in O(1) time. |
 | Dequeue() | Removes and returns the minimum item in the queue. Runs in O(log(N)) time. |
-| Comparer | Exposes the IComparer<T> |
+| Comparer | Exposes the IComparer\<T> |
 
 ## Usage
 
