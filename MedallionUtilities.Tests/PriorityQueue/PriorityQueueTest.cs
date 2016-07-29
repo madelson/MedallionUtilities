@@ -180,6 +180,27 @@ namespace Medallion.PriorityQueue
         }
 
         [Fact]
+        public void TestFindOptimization()
+        {
+            var count = 0;
+            var countingComparer = Comparer<int>.Create((a, b) =>
+            {
+                ++count;
+                return a.CompareTo(b);
+            });
+            var countingQueue = new PriorityQueue<int>(Enumerable.Range(0, 1000), countingComparer);
+
+            count = 0; // reset
+            countingQueue.Contains(-1).ShouldEqual(false);
+            count.ShouldEqual(1);
+
+            count = 0; // reset
+            countingQueue.Remove(-1).ShouldEqual(false);
+            count.ShouldEqual(1);
+        }
+
+
+        [Fact]
         public void TestClear()
         {
             var pq = new PriorityQueue<int>();
