@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("MedallionPriorityQueue")]
 [assembly: AssemblyDescription("A fast generic PriorityQueue data structure .NET")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Michael Adelson")]
 [assembly: AssemblyProduct("MedallionPriorityQueue")]
 [assembly: AssemblyCopyright("Copyright ©  2016")]
 [assembly: AssemblyTrademark("")]
