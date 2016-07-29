@@ -35,6 +35,14 @@ namespace Medallion.PriorityQueue
         }
 
         [Fact]
+        public void TestInitialCapacity()
+        {
+            var pq = new PriorityQueue<int>(0);
+            pq.Enqueue(2);
+            pq.Dequeue().ShouldEqual(2);
+        }
+
+        [Fact]
         public void TestSort()
         {
             var random = new Random(12345);
@@ -61,6 +69,25 @@ namespace Medallion.PriorityQueue
             {
                 pq.Enqueue(n);
                 if (pq.Count > N) { pq.Dequeue(); }
+            }
+
+            pq.CollectionEquals(Enumerable.Range(1000 - N, N)).ShouldEqual(true);
+        }
+
+        [Fact]
+        public void TestMaintainTopNBatchAdds()
+        {
+            const int N = 25;
+
+            var numbers = new Queue<int>(Enumerable.Range(0, 1000));
+            var rand = Rand.CreateJavaRandom(123);
+
+            var pq = new PriorityQueue<int>();
+            while (numbers.Count > 0)
+            {
+                var amountToAdd = Math.Min(numbers.Count, (int)Math.Round(50 * Math.Abs(rand.NextGaussian())));
+                pq.EnqueueRange(Enumerable.Range(0, amountToAdd).Select(_ => numbers.Dequeue()));
+                while (pq.Count > N) { pq.Dequeue(); }
             }
 
             pq.CollectionEquals(Enumerable.Range(1000 - N, N)).ShouldEqual(true);
@@ -129,7 +156,28 @@ namespace Medallion.PriorityQueue
             pq.Remove(6).ShouldEqual(true);
             pq.Dequeue().ShouldEqual(5);
             pq.Count.ShouldEqual(0);
+
+            var absoluteQueue = new PriorityQueue<int>(Comparers.Create<int, int>(Math.Abs));
+            absoluteQueue.Remove(2).ShouldEqual(false);
+            absoluteQueue.Enqueue(2);
+            absoluteQueue.Remove(-2).ShouldEqual(true);
         } 
+
+        [Fact]
+        public void TestContains()
+        {
+            var pq = new PriorityQueue<int>(Enumerable.Range(0, 1000));
+            pq.Contains(-1).ShouldEqual(false);
+            pq.Contains(999).ShouldEqual(true);
+            pq.Contains(500).ShouldEqual(true);
+            pq.Contains(1000).ShouldEqual(false);
+
+            var absoluteQueue = new PriorityQueue<int>(Comparers.Create<int, int>(Math.Abs));
+            absoluteQueue.Contains(9000).ShouldEqual(false);
+            absoluteQueue.Add(9000);
+            absoluteQueue.Contains(9000).ShouldEqual(true);
+            absoluteQueue.Contains(-9000).ShouldEqual(true);
+        }
 
         [Fact]
         public void TestClear()
@@ -146,6 +194,26 @@ namespace Medallion.PriorityQueue
             pq.Dequeue().ShouldEqual(900);
             pq.Clear();
             pq.Count.ShouldEqual(0);
+        }
+
+        [Fact]
+        public void TestCopyTo()
+        {
+            ICollection<string> pq = new PriorityQueue<string>();
+
+            pq.CopyTo(new string[0], 0);
+
+            pq.Add("a");
+            pq.Add("b");
+
+            Assert.Throws<ArgumentNullException>(() => pq.CopyTo(null, 0));
+            Assert.Throws<ArgumentException>(() => pq.CopyTo(new string[1], 0));
+            Assert.Throws<ArgumentException>(() => pq.CopyTo(new string[4], 3));
+            Assert.Throws<ArgumentOutOfRangeException>(() => pq.CopyTo(new string[4], int.MinValue));
+
+            var strings = new string[4];
+            pq.CopyTo(strings, 1);
+            strings.SequenceShouldEqual(new[] { null, "a", "b", null });
         }
 
         [Fact]
@@ -179,10 +247,6 @@ namespace Medallion.PriorityQueue
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
-
-        // collection methods (clear, remove, copyto)
-        // pq methods
-        // gc
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static WeakReference AddWeak<T>(PriorityQueue<T> queue, Func<T> valueFactory)
