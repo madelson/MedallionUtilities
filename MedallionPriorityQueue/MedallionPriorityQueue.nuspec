@@ -16,6 +16,5 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin/Debug/MedallionPriorityQueue.XML" />
   </files>
 </package>
