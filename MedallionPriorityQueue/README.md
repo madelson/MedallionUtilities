@@ -3,9 +3,9 @@
 
 MedallionPriorityQueue contains a fast implementation of a [Priority Queue](https://docs.oracle.com/javase/7/docs/api/java/util/PriorityQueue.html) data structure based on a [binary heap](https://en.wikipedia.org/wiki/Binary_heap).
 
-Download the [NuGet package](https://www.nuget.org/packages/MedallionPriorityQueue) [![NuGet Status](http://img.shields.io/nuget/v/MedallionCollections.svg?style=flat)](https://www.nuget.org/packages/MedallionPriorityQueue/)
+Download the [NuGet package](https://www.nuget.org/packages/MedallionPriorityQueue) [![NuGet Status](http://img.shields.io/nuget/v/MedallionPriorityQueue.svg?style=flat)](https://www.nuget.org/packages/MedallionPriorityQueue/)
 
-Want to use this data structure but don't want an external dependency? Download the [inline NuGet package](https://www.nuget.org/packages/MedallionPriorityQueue.Inline/) [![NuGet Status](http://img.shields.io/nuget/v/MedallionPriorityQueue.Inline.svg?style=flat)](https://www.nuget.org/packages/MedallionCollections.Inline/). For more about inline NuGet packages, check out [this post](http://www.codeducky.org/inline-nuget-packages-a-solution-to-the-problem-of-utility-libraries/).
+Want to use this data structure but don't want an external dependency? Download the [inline NuGet package](https://www.nuget.org/packages/MedallionPriorityQueue.Inline/) [![NuGet Status](http://img.shields.io/nuget/v/MedallionPriorityQueue.Inline.svg?style=flat)](https://www.nuget.org/packages/MedallionPriorityQueue.Inline/). For more about inline NuGet packages, check out [this post](http://www.codeducky.org/inline-nuget-packages-a-solution-to-the-problem-of-utility-libraries/).
 
 ## API
 
