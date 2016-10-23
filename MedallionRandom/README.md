@@ -98,7 +98,7 @@ IEnumerable<int> sequence = Enumerable.Range(0, 100);
 // shuffles using the provided random instance
 IEnumerable<int> shuffled = sequence.Shuffled(random);
 // shuffles using Rand.Current
-IEnumerable<int> shuffled = sequence.Shuffled(random);
+IEnumerable<int> shuffled = sequence.Shuffled();
 
 // the Shuffle() method performs an in-place shuffle on any IList<T>
 List<int> list = Enumerable.Range(0, 100).ToList();

@@ -29,6 +29,7 @@ obj/
 [Bb]in
 [Dd]ebug*/
 [Rr]elease*/
+.vs/
 
 #upgrade from 2010
 Backup/*
