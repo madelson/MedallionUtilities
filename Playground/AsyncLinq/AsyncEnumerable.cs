@@ -10,12 +10,26 @@ namespace Playground.AsyncLinq
 {
     public static class AsyncEnumerable
     {
-        private static readonly Task<bool> CachedTrueTask = BoolTask(true), CachedFalseTask = BoolTask(false);
+        private static readonly Task<bool> CachedTrueTask = BooleanTask(true), CachedFalseTask = BooleanTask(false);
+        private static Task<bool> _cachedCanceledBooleanTask;
 
         internal static Task<bool> TrueTask => CachedTrueTask;
         internal static Task<bool> FalseTask => CachedFalseTask;
+        internal static Task<bool> CanceledTask
+        {
+            get
+            {
+                if (_cachedCanceledBooleanTask == null)
+                {
+                    var canceledTaskBuilder = new TaskCompletionSource<bool>();
+                    canceledTaskBuilder.TrySetCanceled();
+                    _cachedCanceledBooleanTask = canceledTaskBuilder.Task;
+                }
+                return _cachedCanceledBooleanTask;
+            }
+        }
 
-        private static async Task<bool> BoolTask(bool value) => value;
+        private static async Task<bool> BooleanTask(bool value) => value;
 
         public static IAsyncEnumerable<T> Create<T>(Func<AsyncIteratorBuilder<T>, Task> yieldBlock)
         {
