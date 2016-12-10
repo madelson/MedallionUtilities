@@ -14,10 +14,20 @@ namespace Medallion.Collections
     [DebuggerDisplay("Count = {Count}")]
     public sealed class PriorityQueue<T> : ICollection<T>, IReadOnlyCollection<T>
     {
-        // re-usable empty array instance
+        /// <summary>
+        /// Re-usable empty array instance
+        /// </summary>
+        // Enumerable.Empty is currently implemented as a re-used empty array, so try to use that
         private static readonly T[] EmptyArray = Enumerable.Empty<T>() as T[] ?? new T[0];
         
+        /// <summary>
+        /// The binary heap. May contain excess space at the end
+        /// </summary>
         private T[] heap;
+        /// <summary>
+        /// Incremented by mutating operations to allow the <see cref="IEnumerator{T}"/> to throw
+        /// exceptions when the collection is modified concurrently with enumeration
+        /// </summary>
         private int version;
 
         #region ---- Constructors ----
@@ -73,13 +83,14 @@ namespace Medallion.Collections
         {
             if (this.heap.Length == this.Count)
             {
-                this.Expand();
+                // note: we don't need checked here because Count can never be int.MaxValue (see Expand())
+                this.Expand(this.Count + 1);
             }
 
             var lastIndex = this.Count;
             ++this.Count;
             this.Swim(lastIndex, item);
-            ++this.version;
+            unchecked { ++this.version; }
         }
 
         /// <summary>
@@ -107,7 +118,7 @@ namespace Medallion.Collections
                 this.heap[0] = default(T);
             }
 
-            ++this.version;
+            unchecked { ++this.version; }
             return result;
         }
 
@@ -155,31 +166,41 @@ namespace Medallion.Collections
                 }
             }
 
-            ++this.version;
+            unchecked { ++this.version; }
         }
         #endregion
         
         #region ---- Heap Maintenance Methods ----
         /// <summary>
-        /// Grows the queue to hold at least one additional item
+        /// Expands the queue's capacity to store at least <paramref name="requiredCapacity"/> items in total
         /// </summary>
-        private void Expand()
+        private void Expand(int requiredCapacity)
         {
-            var currentCapacity = (uint)this.heap.Length;
-
-            if (currentCapacity == int.MaxValue)
-            {
-                throw new InvalidOperationException("Queue capacity cannot be further expanded");
-            }
-
-            // small heaps grow faster than large ones
-            // based on the java implementation http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/6-b14/java/util/PriorityQueue.java#243
+            // based on the internal Array.MaxArrayLength constant used by List<T>
+            // https://referencesource.microsoft.com/#mscorlib/system/array.cs,2d2b551eabe74985,references
+            const int MaxArrayLength = 0x7FEFFFFF;
             const int InitialCapacity = 16;
 
-            var newCapacity = currentCapacity < InitialCapacity ? InitialCapacity
-                : currentCapacity < 64 ? 2 * (currentCapacity + 1)
-                : 3 * (currentCapacity / 2);
-            Array.Resize(ref this.heap, (int)Math.Min(newCapacity, int.MaxValue));
+            if (requiredCapacity > MaxArrayLength)
+            {
+                throw new InvalidOperationException("Queue cannot be further expanded");
+            }
+
+            var currentCapacity = this.heap.Length;
+            var nextNaturalGrowthCapacity = unchecked(
+                // small heaps grow faster than large ones
+                // inspired by the java implementation http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/6-b14/java/util/PriorityQueue.java#243
+                currentCapacity < InitialCapacity ? InitialCapacity
+                    : currentCapacity < 64 ? 2 * (currentCapacity + 1)
+                    : 3 * (currentCapacity / 2)
+            );
+
+            // if we overflow, expand to max length. Otherwise use the larger of required and next natural
+            var newCapacity = nextNaturalGrowthCapacity < 0 ? MaxArrayLength
+                : nextNaturalGrowthCapacity < requiredCapacity ? requiredCapacity
+                : nextNaturalGrowthCapacity;
+            
+            Array.Resize(ref this.heap, newCapacity);
         }
 
         /// <summary>
@@ -188,8 +209,6 @@ namespace Medallion.Collections
         /// </summary>
         private void Sink(int index, T item)
         {
-            // from http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/6-b14/java/util/PriorityQueue.java#653
-
             var half = this.Count >> 1;
             var i = index;
             while (i < half)
@@ -224,8 +243,6 @@ namespace Medallion.Collections
         /// </summary>
         private void Swim(int index, T item)
         {
-            // from http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/6-b14/java/util/PriorityQueue.java#607
-
             var i = index;
             while (i > 0)
             {
@@ -253,8 +270,8 @@ namespace Medallion.Collections
         /// </summary>
         private void Heapify()
         {
-            // from http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/6-b14/java/util/PriorityQueue.java#673
-
+            // heapify works by starting at the end and sinking each element until we reach the front. Because only
+            // elements in the front half of the heap have children, we can skip half the work by starting from the middle
             for (var i = (this.Count >> 1) - 1; i >= 0; --i)
             {
                 this.Sink(i, this.heap[i]);
@@ -267,38 +284,51 @@ namespace Medallion.Collections
         /// </summary>
         private void AppendItems(IEnumerable<T> items)
         {
-            ICollection<T> itemsCollection;
-            IReadOnlyCollection<T> readOnlyItemsCollection;
-            if ((itemsCollection = items as ICollection<T>) != null)
+            var itemsCollection = items as ICollection<T>;
+            if (itemsCollection != null)
             {
-                if (itemsCollection.Count > 0)
+                var itemsCollectionCount = itemsCollection.Count;
+                if (itemsCollectionCount > 0)
                 {
-                    this.heap = new T[checked(this.Count + itemsCollection.Count)];
+                    var newCount = checked(this.Count + itemsCollectionCount);
+                    if (newCount > this.heap.Length)
+                    {
+                        this.Expand(newCount);
+                    }
                     itemsCollection.CopyTo(this.heap, arrayIndex: this.Count);
-                    this.Count = itemsCollection.Count;
+                    this.Count = newCount;
                 }
+                return;
             }
-            else if ((readOnlyItemsCollection = items as IReadOnlyCollection<T>) != null)
+
+            var readOnlyItemsCollection = items as IReadOnlyCollection<T>;
+            if (readOnlyItemsCollection != null)
             {
-                if (readOnlyItemsCollection.Count > 0)
+                var readOnlyItemsCollectionCount = readOnlyItemsCollection.Count;
+                if (readOnlyItemsCollectionCount > 0)
                 {
-                    this.heap = new T[checked(this.Count + readOnlyItemsCollection.Count)];
+                    var newCount = checked(this.Count + readOnlyItemsCollectionCount);
+                    if (newCount > this.heap.Length)
+                    {
+                        this.Expand(newCount);
+                    }
+
                     foreach (var item in readOnlyItemsCollection)
                     {
                         this.heap[this.Count++] = item;
                     }
                 }
+                return;
             }
-            else
+            
+            foreach (var item in items)
             {
-                foreach (var item in items)
+                // note: we don't need checked here because Count can never be as high as int.MaxValue (see Expand)
+                if (this.Count == this.heap.Length)
                 {
-                    if (this.Count == this.heap.Length)
-                    {
-                        this.Expand();
-                    }
-                    this.heap[checked(this.Count++)] = item;
+                    this.Expand(this.Count + 1);
                 }
+                this.heap[this.Count++] = item;
             }
         }
         #endregion
@@ -335,7 +365,7 @@ namespace Medallion.Collections
             }
 
             this.Count = 0;
-            ++this.version;
+            unchecked { ++this.version; }
         }
 
         /// <summary>
@@ -385,7 +415,7 @@ namespace Medallion.Collections
                     this.Sink(indexToRemove, lastItem);
                 }
 
-                ++this.version;
+                unchecked { ++this.version; }
                 return true;
             }
 

@@ -9,9 +9,9 @@
     <projectUrl>https://github.com/madelson/MedallionUtilities/tree/master/MedallionPriorityQueue</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Initial release</releaseNotes>
+    <releaseNotes>Fixed bug with EnqueueRange on non-empty queues, improved overflow behavior</releaseNotes>
     <copyright>Copyright 2016</copyright>
-    <tags>priorityqueue priority queue pq minpq maxpq heap collection enumerable comparer utility</tags>
+    <tags>priorityqueue priority queue pq minpq maxpq binary heap collection enumerable comparer utility</tags>
     <dependencies>
     </dependencies>
   </metadata>

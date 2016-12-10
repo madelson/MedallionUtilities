@@ -1,5 +1,6 @@
 ﻿using Medallion.Collections;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -79,9 +80,9 @@ namespace Medallion.PriorityQueue
         {
             const int N = 25;
 
-            var numbers = new Queue<int>(Enumerable.Range(0, 1000));
             var rand = Rand.CreateJavaRandom(123);
-
+            var numbers = new Queue<int>(Enumerable.Range(0, 1000).Shuffled(rand));
+            
             var pq = new PriorityQueue<int>();
             while (numbers.Count > 0)
             {
@@ -91,6 +92,53 @@ namespace Medallion.PriorityQueue
             }
 
             pq.CollectionEquals(Enumerable.Range(1000 - N, N)).ShouldEqual(true);
+        }
+
+        [Fact]
+        public void TestMaintainTopNBatchArrayAdds()
+        {
+            const int N = 25;
+
+            var rand = Rand.CreateJavaRandom(321);
+            var numbers = new Queue<int>(Enumerable.Range(0, 1000).Shuffled(rand));
+
+            var pq = new PriorityQueue<int>();
+            while (numbers.Count > 0)
+            {
+                var amountToAdd = Math.Min(numbers.Count, (int)Math.Round(50 * Math.Abs(rand.NextGaussian())));
+                pq.EnqueueRange(Enumerable.Range(0, amountToAdd).Select(_ => numbers.Dequeue()).ToArray());
+                while (pq.Count > N) { pq.Dequeue(); }
+            }
+
+            pq.CollectionEquals(Enumerable.Range(1000 - N, N)).ShouldEqual(true);
+        }
+
+        [Fact]
+        public void TestMaintainTopNBatchReadOnlyCollectionAdds()
+        {
+            const int N = 25;
+
+            var rand = Rand.CreateJavaRandom(213);
+            var numbers = new Queue<int>(Enumerable.Range(0, 1000).Shuffled(rand));
+            
+            var pq = new PriorityQueue<int>();
+            while (numbers.Count > 0)
+            {
+                var amountToAdd = Math.Min(numbers.Count, (int)Math.Round(50 * Math.Abs(rand.NextGaussian())));
+                pq.EnqueueRange(new ReadOnlyCollectionWrapper<int> { Collection = Enumerable.Range(0, amountToAdd).Select(_ => numbers.Dequeue()).ToArray() });
+                while (pq.Count > N) { pq.Dequeue(); }
+            }
+
+            pq.CollectionEquals(Enumerable.Range(1000 - N, N)).ShouldEqual(true);
+        }
+
+        private class ReadOnlyCollectionWrapper<T> : IReadOnlyCollection<T>
+        {
+            public ICollection<T> Collection { get; set; }
+
+            public int Count => this.Collection.Count;
+            public IEnumerator<T> GetEnumerator() => this.Collection.GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
         }
 
         [Fact]
@@ -199,7 +247,6 @@ namespace Medallion.PriorityQueue
             count.ShouldEqual(1);
         }
 
-
         [Fact]
         public void TestClear()
         {
@@ -277,5 +324,19 @@ namespace Medallion.PriorityQueue
             queue.Add(value);
             return new WeakReference(value);
         }        
+
+        [Fact]
+        public void TestOverflow()
+        {
+            Assert.Throws<InvalidOperationException>(() => new PriorityQueue<int>(new Zeroes { Count = int.MaxValue }));
+            Assert.Throws<InvalidOperationException>(() => new PriorityQueue<int>().EnqueueRange(new Zeroes { Count = int.MaxValue }));
+        }
+
+        private class Zeroes : IReadOnlyCollection<int>
+        {
+            public int Count { get; set; }
+            public IEnumerator<int> GetEnumerator() => Enumerable.Repeat(0, this.Count).GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
+        }
     }
 }
