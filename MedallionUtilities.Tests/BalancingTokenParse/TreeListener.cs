@@ -65,7 +65,7 @@ namespace Medallion.BalancingTokenParse
                 {
                     NonTerminal = this.NonTerminal,
                     Children = this.Children.Select(c => c.Flatten())
-                        .SelectMany(c => c.Symbol.Name == this.Symbol.Name ? c.Children : new[] { c })
+                        .SelectMany(c => c.Symbol == this.Symbol ? c.Children : new[] { c })
                         .ToArray()
                 };
             }

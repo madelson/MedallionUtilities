@@ -53,5 +53,24 @@ namespace Medallion.BalancingTokenParse
             listener.Root.Flatten().ToString()
                 .ShouldEqual("Start(List<Stmt>(Stmt(Exp(ID), ;), Stmt(Exp([, List<Exp>(Exp(ID), Exp([, List<Exp>(Exp(ID), Exp(ID)), ])), ]), ;)))");
         }
+
+        [Fact]
+        public void TestExpressionVsStatementListConflict()
+        {
+            var rules = new[]
+            {
+                new Rule(Start, Stmt),
+                new Rule(Stmt, Exp, SEMICOLON),
+                new Rule(Exp, ID),
+                new Rule(Exp, OPEN_BRACKET, ExpList, CLOSE_BRACKET),
+                new Rule(Exp, OPEN_BRACKET, Stmt, StmtList, CLOSE_BRACKET),
+                new Rule(ExpList),
+                new Rule(ExpList, Exp, ExpList),
+                new Rule(StmtList),
+                new Rule(StmtList, Stmt, StmtList)
+            };
+
+            var parser = new ParserGenerator(rules).Create();
+        }
     }
 }
