@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Medallion.Collections;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,7 +12,7 @@ namespace Playground.BalancingTokenParse
         private readonly IReadOnlyList<Rule> rules;
         private readonly FirstFollowCalculator firstFollow;
 
-
+        private readonly Dictionary<DiscriminatorInfoCacheKey, DiscriminatorInfo> discriminatorCache = new Dictionary<DiscriminatorInfoCacheKey, DiscriminatorInfo>();
 
         public ParserGenerator(IEnumerable<Rule> grammar)
         {
@@ -41,7 +42,7 @@ namespace Playground.BalancingTokenParse
                     finalTable[nonTerminal].Add(
                         kvp.Key, 
                         kvp.Value.Count > 1 
-                            ? new Action { Discriminator = this.GetDiscriminator(kvp.Key, kvp.Value) }
+                            ? new Action { Discriminator = this.GetDiscriminator(kvp.Key, kvp.Value, $"_{nonTerminal} on {kvp.Key}_") }
                             : new Action { Rule = kvp.Value[0] }
                     );
                 }
@@ -50,18 +51,28 @@ namespace Playground.BalancingTokenParse
             return new TableParser { StartSymbol = this.firstFollow.StartSymbol, Table = finalTable };
         }
         
-        private DiscriminatorInfo GetDiscriminator(Token token, IReadOnlyList<Rule> rules)
+        private DiscriminatorInfo GetDiscriminator(Token token, IReadOnlyList<Rule> rules, string name)
         {
             var discriminators = rules.Select(r => new { r, remainings = this.GetRemainings(r, token) })
                 .ToArray();
 
-            var discriminatorSymbol = new NonTerminal($"DISC-ON-{token}-{Guid.NewGuid()}");
+            var cacheKey = new DiscriminatorInfoCacheKey(discriminators.Select(t => t.remainings));
+            DiscriminatorInfo existing;
+            if (this.discriminatorCache.TryGetValue(cacheKey, out existing))
+            {
+                return existing;
+            }
+
+            var discriminatorSymbol = new NonTerminal(name);
+            var result = new DiscriminatorInfo { Symbol = discriminatorSymbol };
+            this.discriminatorCache.Add(cacheKey, result);
+
             var discriminatorRules = discriminators.SelectMany(t => t.remainings, (t, remaining) => new { origRule = t.r, newRule = new Rule(discriminatorSymbol, remaining) })
                 .Select(t => new { t.origRule, t.newRule, next = this.NextOf(new Rule(t.origRule.Produced, t.newRule.Symbols)) })
                 .ToArray();
 
             var allNexts = discriminatorRules.SelectMany(t => t.next).Distinct().ToArray();
-            var result = new DiscriminatorInfo { Symbol = discriminatorSymbol };
+            var subDiscriminatorId = 0;
             foreach (var next in allNexts)
             {
                 var matchingRules = discriminatorRules.Where(t => t.next.Contains(next)).ToArray();
@@ -71,7 +82,11 @@ namespace Playground.BalancingTokenParse
                 }
                 else
                 {
-                    var subDiscriminator = this.GetDiscriminator(next, matchingRules.Select(t => t.newRule).ToArray());
+                    var subDiscriminator = this.GetDiscriminator(
+                        next, 
+                        matchingRules.Select(t => t.newRule).ToArray(),
+                        name: $"{name}/{subDiscriminatorId++}"
+                    );
                     result.ComplexDiscriminations.Add(
                         next,
                         Tuple.Create(
@@ -173,6 +188,41 @@ namespace Playground.BalancingTokenParse
             /// 2. a <see cref="DiscriminatorInfo"/> which picks between pseudo rules
             /// </summary>
             public Dictionary<Token, Tuple<Dictionary<Rule, Rule>, DiscriminatorInfo>> ComplexDiscriminations { get; } = new Dictionary<Token, Tuple<Dictionary<Rule, Rule>, DiscriminatorInfo>>();
+
+            public override string ToString() => $"{this.Symbol.Name} ({this.SimpleDiscriminations.Count}, {this.ComplexDiscriminations.Count}";
+        }
+
+        private sealed class DiscriminatorInfoCacheKey
+        {
+            private static readonly IEqualityComparer<IReadOnlyCollection<IReadOnlyCollection<IReadOnlyList<Symbol>>>> Comparer =
+                EqualityComparers.GetCollectionComparer(
+                    EqualityComparers.GetCollectionComparer(
+                        EqualityComparers.GetSequenceComparer<Symbol>()
+                    )
+                );
+
+            private readonly IReadOnlyCollection<IReadOnlyCollection<IReadOnlyList<Symbol>>> suffixRuleGroups;
+            private readonly int hash;
+
+            public DiscriminatorInfoCacheKey(IEnumerable<IReadOnlyCollection<IReadOnlyList<Symbol>>> suffixRuleGroups)
+            {
+                this.suffixRuleGroups = suffixRuleGroups.ToArray();
+                this.hash = Comparer.GetHashCode(this.suffixRuleGroups);
+            }
+
+            public override bool Equals(object obj)
+            {
+                var that = obj as DiscriminatorInfoCacheKey;
+                return that != null && this.hash == that.hash && Comparer.Equals(this.suffixRuleGroups, that.suffixRuleGroups);
+            }
+
+            public override int GetHashCode() => this.hash;
+
+            public override string ToString() =>
+                string.Join(
+                    Environment.NewLine + Environment.NewLine,
+                    this.suffixRuleGroups.Select(g => string.Join(Environment.NewLine, g.Select(s => string.Join(" ", s))))
+                );
         }
 
         private class TableParser : IParser
