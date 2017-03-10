@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Playground.BalancingTokenParse
 {
-    class FirstFollowCalculator
+    class FirstFollowCalculator : IFirstFollowProvider
     {
         public FirstFollowCalculator(IReadOnlyCollection<Rule> rules)
         {
@@ -103,16 +104,19 @@ namespace Playground.BalancingTokenParse
             } while (changed);
 
             this.StartSymbol = startSymbol;
-            this.Tokens = new HashSet<Token>(allSymbols.OfType<Token>());
-            this.NonTerminals = new HashSet<NonTerminal>(allSymbols.OfType<NonTerminal>());
-            this.First = firsts;
-            this.Follow = follows;
+            this.Tokens = ImmutableHashSet<Token>.Empty.Union(allSymbols.OfType<Token>());
+            this.NonTerminals = ImmutableHashSet<NonTerminal>.Empty.Union(allSymbols.OfType<NonTerminal>());
+            this.First = firsts.ToDictionary(kvp => kvp.Key, kvp => (IImmutableSet<Token>)ImmutableHashSet.CreateRange(kvp.Value));
+            this.Follow = follows.ToDictionary(kvp => kvp.Key, kvp => (IImmutableSet<Token>)ImmutableHashSet.CreateRange(kvp.Value));
         }
 
         public NonTerminal StartSymbol { get; }
-        public ISet<Token> Tokens { get; }
-        public ISet<NonTerminal> NonTerminals { get; }
-        public IReadOnlyDictionary<Symbol, ISet<Token>> First { get; }
-        public IReadOnlyDictionary<Symbol, ISet<Token>> Follow { get; }
+        public IImmutableSet<Token> Tokens { get; }
+        public IImmutableSet<NonTerminal> NonTerminals { get; }
+        public IReadOnlyDictionary<Symbol, IImmutableSet<Token>> First { get; }
+        public IReadOnlyDictionary<Symbol, IImmutableSet<Token>> Follow { get; }
+
+        public IImmutableSet<Token> FirstOf(Symbol symbol) => this.First[symbol];
+        public IImmutableSet<Token> FollowOf(Symbol symbol) => this.Follow[symbol];
     }
 }

@@ -13,6 +13,7 @@ namespace Playground.BalancingTokenParse
         private readonly FirstFollowCalculator firstFollow;
 
         private readonly Dictionary<DiscriminatorInfoCacheKey, DiscriminatorInfo> discriminatorCache = new Dictionary<DiscriminatorInfoCacheKey, DiscriminatorInfo>();
+        private readonly List<DiscriminatorUsage> discriminatorUsages = new List<DiscriminatorUsage>();
 
         public ParserGenerator(IEnumerable<Rule> grammar)
         {
@@ -53,6 +54,15 @@ namespace Playground.BalancingTokenParse
         
         private DiscriminatorInfo GetDiscriminator(Token token, IReadOnlyList<Rule> rules, string name)
         {
+            var prefixDiscriminator = this.discriminatorUsages.FirstOrDefault(
+                u => u.Token == token
+                    && rules.All(r => u.Rules.Any(ur => r.Symbols.Take(ur.Symbols.Count).SequenceEqual(ur.Symbols)))
+            );
+            if (prefixDiscriminator != null)
+            {
+                return prefixDiscriminator.Discriminator;
+            }
+
             var discriminators = rules.Select(r => new { r, remainings = this.GetRemainings(r, token) })
                 .ToArray();
 
@@ -60,12 +70,14 @@ namespace Playground.BalancingTokenParse
             DiscriminatorInfo existing;
             if (this.discriminatorCache.TryGetValue(cacheKey, out existing))
             {
+                this.discriminatorUsages.Add(new DiscriminatorUsage { Discriminator = existing, Token = token, Rules = rules });
                 return existing;
             }
 
             var discriminatorSymbol = new NonTerminal(name);
             var result = new DiscriminatorInfo { Symbol = discriminatorSymbol };
             this.discriminatorCache.Add(cacheKey, result);
+            this.discriminatorUsages.Add(new DiscriminatorUsage { Discriminator = result, Token = token, Rules = rules });
 
             var discriminatorRules = discriminators.SelectMany(t => t.remainings, (t, remaining) => new { origRule = t.r, newRule = new Rule(discriminatorSymbol, remaining) })
                 .Select(t => new { t.origRule, t.newRule, next = this.NextOf(new Rule(t.origRule.Produced, t.newRule.Symbols)) })
@@ -82,6 +94,22 @@ namespace Playground.BalancingTokenParse
                 }
                 else
                 {
+                    //var prefixDiscriminator = this.discriminatorUsages.FirstOrDefault(
+                    //    u => u.Token == next
+                    //        && matchingRules.All(r => u.Rules.Any(ur => r.newRule.Symbols.Take(ur.Symbols.Count).SequenceEqual(ur.Symbols)))
+                    //);
+                    //if (prefixDiscriminator != null)
+                    //{
+                    //    result.ComplexDiscriminations.Add(
+                    //        next,
+                    //        Tuple.Create(
+                    //            matchingRules.ToDictionary(t => t.newRule, t => t.origRule),  // wrong
+                    //            prefixDiscriminator.Discriminator
+                    //        )
+                    //    );
+                    //    continue;
+                    //}
+
                     var subDiscriminator = this.GetDiscriminator(
                         next, 
                         matchingRules.Select(t => t.newRule).ToArray(),
@@ -117,7 +145,10 @@ namespace Playground.BalancingTokenParse
         {
             foreach (var rule in rules)
             {
-                if (rule.Symbols.Count == 0) { throw new InvalidOperationException("Can't differentiate: reached empty rule!"); }
+                if (rule.Symbols.Count == 0)
+                {
+                    throw new InvalidOperationException("Can't differentiate: reached empty rule!");
+                }
 
                 if (rule.Symbols[0] == toRemove)
                 {
@@ -190,6 +221,13 @@ namespace Playground.BalancingTokenParse
             public Dictionary<Token, Tuple<Dictionary<Rule, Rule>, DiscriminatorInfo>> ComplexDiscriminations { get; } = new Dictionary<Token, Tuple<Dictionary<Rule, Rule>, DiscriminatorInfo>>();
 
             public override string ToString() => $"{this.Symbol.Name} ({this.SimpleDiscriminations.Count}, {this.ComplexDiscriminations.Count}";
+        }
+
+        private sealed class DiscriminatorUsage
+        {
+            public DiscriminatorInfo Discriminator { get; set; }
+            public Token Token { get; set; }
+            public IReadOnlyList<Rule> Rules { get; set; }
         }
 
         private sealed class DiscriminatorInfoCacheKey
