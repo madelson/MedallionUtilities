@@ -28,14 +28,16 @@ namespace Playground.BalancingTokenParse
             foreach (var symbol in symbols)
             {
                 var firsts = provider.FirstOf(symbol);
-                builder.UnionWith(firsts);
+                builder.UnionWith(firsts.Where(s => s != null));
                 if (!firsts.ContainsDefault())
                 {
-                    break;
+                    // not nullable
+                    return builder.ToImmutable();
                 }
             }
 
-            return builder.ToImmutable();
+            // if we reach here, we're nullable
+            return builder.ToImmutable().AddDefault();
         }
 
         public static IImmutableSet<Token> NextOf(this IFirstFollowProvider provider, Rule rule)
