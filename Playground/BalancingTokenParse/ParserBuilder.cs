@@ -15,6 +15,7 @@ namespace Playground.BalancingTokenParse
         private readonly Dictionary<NonTerminal, IReadOnlyList<Rule>> rules;
         private readonly Queue<NonTerminal> remainingSymbols;
         private readonly HashSet<NonTerminal> discriminatorSymbols = new HashSet<NonTerminal>();
+        private readonly Dictionary<NonTerminal, IParserNode> result = new Dictionary<NonTerminal, IParserNode>();
 
         private ParserBuilder(IEnumerable<Rule> rules)
         {
@@ -32,11 +33,10 @@ namespace Playground.BalancingTokenParse
 
         private Dictionary<NonTerminal, IParserNode> CreateParser()
         {
-            var result = new Dictionary<NonTerminal, IParserNode>();
             while (this.remainingSymbols.Count > 0)
             {
                 var next = this.remainingSymbols.Dequeue();
-                result.Add(next, this.CreateParserNode(next));
+                this.CreateParserNode(next);
             }
 
             return result;
@@ -44,7 +44,13 @@ namespace Playground.BalancingTokenParse
 
         private IParserNode CreateParserNode(NonTerminal symbol)
         {
-            return this.CreateParserNode(this.rules[symbol].Select(r => new PartialRule(r)).ToArray());
+            // don't recompute if we already have; this is important for making sure 
+            IParserNode existing;
+            if (this.result.TryGetValue(symbol, out existing)) { return existing; }
+
+            var symbolParser = this.CreateParserNode(this.rules[symbol].Select(r => new PartialRule(r)).ToArray());
+            this.result.Add(symbol, symbolParser);
+            return symbolParser;
         }
 
         private IParserNode CreateParserNode(IReadOnlyList<PartialRule> rules)
@@ -80,43 +86,78 @@ namespace Playground.BalancingTokenParse
         
         private IParserNode CreateNonLL1ParserNode(Token lookaheadToken, IReadOnlyList<PartialRule> rules)
         {
-            if (rules.Count == 0) { throw new ArgumentException(nameof(rules)); } // sanity check
+            // sanity checks
+            if (rules.Count <= 1) { throw new ArgumentException(nameof(rules), "must be more than one"); }
+            if (rules.Select(r => r.Produced).Distinct().Count() != 1) { throw new ArgumentException(nameof(rules), "must all produce the same symbol"); }
 
-            //var prefixLength = Enumerable.Range(0, count: rules.Min(r => r.Symbols.Count))
-            //    .TakeWhile(i => rules.Skip(1).All(r => r.Symbols[i] == rules[0].Symbols[i]))
-            //    .Select(i => (int?)(i + 1))
-            //    .LastOrDefault();
-            
-            //if (prefixLength.HasValue)
-            //{
-            //    throw new NotImplementedException();
-            //}
+            // look for a common prefix containing non-terminals (we reserve token-only prefixes for transformation into discriminators)
 
+            var prefixLength = Enumerable.Range(0, count: rules.Min(r => r.Symbols.Count))
+                .TakeWhile(i => rules.Skip(1).All(r => r.Symbols[i] == rules[0].Symbols[i]))
+                .Select(i => i + 1)
+                .LastOrDefault();
+
+            if (prefixLength > 0 && !rules[0].Symbols.Take(prefixLength).All(r => r is Token))
+            {
+                return new ParseSymbolNode(
+                    rules[0].Symbols.Take(prefixLength),
+                    this.CreateParserNode(rules.Select(r => new PartialRule(r, start: prefixLength)).ToArray())
+                );
+            }
+
+            // next, if we are producing a discriminator, see if an existing discriminator is a prefix. This 
+            // lets us handle recursion within the lookahead grammar
+            if (this.discriminatorSymbols.Contains(rules[0].Produced))
+            {
+                var match = this.discriminatorSymbols
+                    .Where(s => s != rules[0].Produced)
+                    .Select(s => new { discriminator = s, mapping = this.MapSymbolRules(s, rules) })
+                    .FirstOrDefault(t => t.mapping != null);
+                if (match != null)
+                {
+                    // first parse the discriminator
+                    var discriminatorParse = this.CreateParserNode(match.discriminator);
+                    // then map it's result to determine how to parse the remaining symbols
+                    return new MapResultNode(
+                        discriminatorParse,
+                        match.mapping.GroupBy(kvp => kvp.Value, kvp => kvp.Key)
+                            .ToDictionary(
+                                g => g.Key,
+                                g => this.CreateParserNode(g.ToArray())
+                            )
+                    );
+                }
+            }
+
+            // otherwise, we will need to create a new node as part of the lookahead grammar
             return this.CreateGrammarLookaheadParserNode(lookaheadToken, rules);
         }
-
+        
         private IParserNode CreateGrammarLookaheadParserNode(Token lookaheadToken, IReadOnlyList<PartialRule> rules)
         {
+            // sanity checks
+            if (rules.Select(r => r.Rule).Distinct().Count() != rules.Count) { throw new ArgumentException(nameof(rules), "must be partials of distinct rules"); }
+
             var suffixToRuleMapping = rules.SelectMany(r => this.GatherPostTokenSuffixes(lookaheadToken, r), (r, suffix) => new { r, suffix })
                 // note: this will throw if two rules have the same suffix, but it's not very elegant
                 .ToDictionary(t => t.suffix, t => t.r, (IEqualityComparer<IReadOnlyList<Symbol>>)EqualityComparers.GetSequenceComparer<Symbol>());
 
-            var match = this.discriminatorSymbols
-                .Select(s => new { discriminator = s, mapping = this.MapSymbolRules(s, suffixToRuleMapping.Keys) })
-                .FirstOrDefault(t => t.mapping != null);
+            //var match = this.discriminatorSymbols
+            //    .Select(s => new { discriminator = s, mapping = this.MapSymbolRules(s, suffixToRuleMapping.Keys) })
+            //    .FirstOrDefault(t => t.mapping != null);
             
-            if (match != null && match.mapping.All(kvp => kvp.Key.Count == kvp.Value.Symbols.Count))
-            {
-                // exact match: don't create a new discriminator
-                return new GrammarLookaheadNode(
-                    lookaheadToken,
-                    match.discriminator,
-                    match.mapping.ToDictionary(
-                        kvp => kvp.Value,
-                        kvp => (IParserNode)new ParseRuleNode(suffixToRuleMapping[kvp.Key])
-                    )
-                );
-            }
+            //if (match != null && match.mapping.All(kvp => kvp.Key.Count == kvp.Value.Symbols.Count))
+            //{
+            //    // exact match: don't create a new discriminator
+            //    return new GrammarLookaheadNode(
+            //        lookaheadToken,
+            //        match.discriminator,
+            //        match.mapping.ToDictionary(
+            //            kvp => kvp.Value,
+            //            kvp => (IParserNode)new ParseRuleNode(suffixToRuleMapping[kvp.Key])
+            //        )
+            //    );
+            //}
 
             // create the discriminator symbol
             var discriminator = new NonTerminal("T" + this.discriminatorSymbols.Count);
@@ -124,30 +165,6 @@ namespace Playground.BalancingTokenParse
             this.rules[discriminator] = suffixToRuleMapping.Keys.Select(symbols => new Rule(discriminator, symbols)).ToArray();
             this.firstFollow.Register(discriminator, suffixToRuleMapping.Keys);
             this.remainingSymbols.Enqueue(discriminator);
-
-            if (match != null)
-            {
-                // partial match: parse the discriminator and then parse the remainder based on its output
-                return new GrammarLookaheadNode(
-                    lookaheadToken,
-                    match.discriminator,
-                    match.mapping.GroupBy(kvp => kvp.Value, kvp => kvp.Key)
-                        .ToDictionary(
-                            g => g.Key,
-                            g => this.CreateSuffixParserNode(
-                                g.GroupBy(
-                                    s => suffixToRuleMapping[s].Rule,
-                                    s => new PartialRule(this.rules[discriminator].Single(r => r.Symbols.SequenceEqual(s)), start: g.Key.Symbols.Count)
-                                )
-                                .ToDictionary(
-                                    gg => gg.Key,
-                                    // this will remove dupes, but that's ok since they yield the same rule anyway
-                                    gg => (ISet<PartialRule>)new HashSet<PartialRule>(gg)
-                                )
-                            )
-                        )
-                );
-            }
             
             return new GrammarLookaheadNode(
                 lookaheadToken,
@@ -155,41 +172,19 @@ namespace Playground.BalancingTokenParse
                 // map each discriminator rule back to the corresponding original rule
                 this.rules[discriminator].ToDictionary(
                     r => r,
-                    r => (IParserNode)new ParseRuleNode(suffixToRuleMapping[r.Symbols])
+                    r => suffixToRuleMapping[r.Symbols].Rule
                 )
             );
         }
 
-        /// <summary>
-        /// Creates an <see cref="IParserNode"/> which considers a set of <see cref="PartialRule"/>s each of whose result
-        /// is pre-mapped to a given <see cref="Rule"/>
-        /// </summary>
-        private IParserNode CreateSuffixParserNode(IReadOnlyDictionary<Rule, ISet<PartialRule>> rulesToPartialRules)
+        private Dictionary<PartialRule, Rule> MapSymbolRules(NonTerminal discriminator, IReadOnlyCollection<PartialRule> toMap)
         {
-            var allPartialRules = rulesToPartialRules.SelectMany(kvp => kvp.Value).Distinct().ToArray();
-            if (allPartialRules.Length != rulesToPartialRules.Sum(kvp => kvp.Value.Count))
-            {
-                throw new NotSupportedException("ambiguous");
-            }
-
-            return new MapResultNode(
-                this.CreateParserNode(allPartialRules),
-                allPartialRules.GroupBy(pr => pr.Rule)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => rulesToPartialRules.Single(kvp => g.Any(kvp.Value.Contains)).Key
-                    )
-             );
-        }
-
-        private Dictionary<IReadOnlyList<Symbol>, Rule> MapSymbolRules(NonTerminal discriminator, IReadOnlyCollection<IReadOnlyList<Symbol>> toMap)
-        {
-            var result = new Dictionary<IReadOnlyList<Symbol>, Rule>(EqualityComparers.GetSequenceComparer<Symbol>());
+            var result = new Dictionary<PartialRule, Rule>();
             foreach (var rule in this.rules[discriminator])
             {
                 if (rule.Symbols.Count == 0) { return null; }
 
-                foreach (var match in toMap.Where(r => r.Take(rule.Symbols.Count).SequenceEqual(rule.Symbols)))
+                foreach (var match in toMap.Where(r => r.Symbols.Take(rule.Symbols.Count).SequenceEqual(rule.Symbols)))
                 {
                     Rule existingMapping;
                     if (!result.TryGetValue(match, out existingMapping) || existingMapping.Symbols.Count < rule.Symbols.Count)
@@ -199,8 +194,8 @@ namespace Playground.BalancingTokenParse
                 }
             }
 
+            // require that all rules and all partial rules were mapped
             if (result.Count != toMap.Count) { return null; }
-
             if (this.rules[discriminator].Except(result.Values).Any()) { return null; }
 
             return result;

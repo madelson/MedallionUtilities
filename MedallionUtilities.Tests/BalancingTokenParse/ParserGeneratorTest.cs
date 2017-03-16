@@ -70,7 +70,8 @@ namespace Medallion.BalancingTokenParse
                 new Rule(StmtList, Stmt, StmtList)
             };
 
-            var parser = new ParserGenerator(rules).Create();
+            ParserBuilder.CreateParser(rules);
+            //var parser = new ParserGenerator(rules).Create();
         }
     }
 }

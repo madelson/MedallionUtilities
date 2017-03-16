@@ -18,7 +18,6 @@ namespace Playground.BalancingTokenParse
         ParsePrefixSymbols,
         TokenLookahead,
         GrammarLookahead,
-        Result,
         MapResult,
     }
 
@@ -67,42 +66,40 @@ namespace Playground.BalancingTokenParse
 
     internal sealed class GrammarLookaheadNode : IParserNode
     {
-        public GrammarLookaheadNode(Token token, NonTerminal discriminator, IEnumerable<KeyValuePair<Rule, IParserNode>> mapping)
+        public GrammarLookaheadNode(Token token, NonTerminal discriminator, IEnumerable<KeyValuePair<Rule, Rule>> mapping)
         {
             this.Token = token;
             this.Discriminator = discriminator;
             this.Mapping = mapping.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            if (this.Mapping.Keys.Any(r => r.Produced != this.Discriminator))
+            {
+                throw new ArgumentException(nameof(mapping), "key rules must produce the discriminator");
+            }
+            if (this.Mapping.Values.Any(r => r.Produced == this.Discriminator))
+            {
+                throw new ArgumentException(nameof(mapping), "value rules must not produce the discriminator");
+            }
         }
 
         public Token Token { get; }
         public NonTerminal Discriminator { get; }
-        public IReadOnlyDictionary<Rule, IParserNode> Mapping { get; }
+        public IReadOnlyDictionary<Rule, Rule> Mapping { get; }
         public ParserNodeKind Kind => ParserNodeKind.GrammarLookahead;
 
         public override string ToString() => $"{this.Token}, Parse({this.Discriminator}) {{ {string.Join(", ", this.Mapping.Select(kvp => $"{kvp.Key} => {kvp.Value}"))} }}";
     }
 
-    internal sealed class ResultNode : IParserNode
-    {
-        public ResultNode(Rule rule)
-        {
-            this.Rule = rule;
-        }
-
-        public Rule Rule { get; }
-        public ParserNodeKind Kind => ParserNodeKind.Result;
-    }
-
     internal sealed class MapResultNode : IParserNode
     {
-        public MapResultNode(IParserNode mapped, IEnumerable<KeyValuePair<Rule, Rule>> mapping)
+        public MapResultNode(IParserNode mapped, IEnumerable<KeyValuePair<Rule, IParserNode>> mapping)
         {
             this.Mapped = mapped;
             this.Mapping = mapping.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
 
         public IParserNode Mapped { get; }
-        public IReadOnlyDictionary<Rule, Rule> Mapping { get; }
+        public IReadOnlyDictionary<Rule, IParserNode> Mapping { get; }
         public ParserNodeKind Kind => ParserNodeKind.MapResult;
 
         public override string ToString() => $"Map {{ {string.Join(", ", this.Mapping.Select(kvp => $"{kvp.Key} => {kvp.Value}"))} }}";
