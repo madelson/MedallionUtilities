@@ -15,7 +15,8 @@ namespace Playground.BalancingTokenParse
         private readonly Dictionary<NonTerminal, IReadOnlyList<Rule>> rules;
         private readonly Queue<NonTerminal> remainingSymbols;
         private readonly HashSet<NonTerminal> discriminatorSymbols = new HashSet<NonTerminal>();
-        private readonly Dictionary<NonTerminal, IParserNode> result = new Dictionary<NonTerminal, IParserNode>();
+        private readonly Dictionary<IReadOnlyCollection<PartialRule>, IParserNode> cache =
+            new Dictionary<IReadOnlyCollection<PartialRule>, IParserNode>(EqualityComparers.GetCollectionComparer<PartialRule>());
 
         private ParserBuilder(IEnumerable<Rule> rules)
         {
@@ -33,10 +34,11 @@ namespace Playground.BalancingTokenParse
 
         private Dictionary<NonTerminal, IParserNode> CreateParser()
         {
+            var result = new Dictionary<NonTerminal, IParserNode>();
             while (this.remainingSymbols.Count > 0)
             {
                 var next = this.remainingSymbols.Dequeue();
-                this.CreateParserNode(next);
+                result.Add(next, this.CreateParserNode(next));
             }
 
             return result;
@@ -44,16 +46,29 @@ namespace Playground.BalancingTokenParse
 
         private IParserNode CreateParserNode(NonTerminal symbol)
         {
-            // don't recompute if we already have; this is important for making sure we don't stack-overflow
-            IParserNode existing;
-            if (this.result.TryGetValue(symbol, out existing)) { return existing; }
-
-            var symbolParser = this.CreateParserNode(this.rules[symbol].Select(r => new PartialRule(r)).ToArray());
-            this.result.Add(symbol, symbolParser);
-            return symbolParser;
+            return this.CreateParserNode(this.rules[symbol].Select(r => new PartialRule(r)).ToArray());
         }
 
         private IParserNode CreateParserNode(IReadOnlyList<PartialRule> rules)
+        {
+            // it's important to cache at this level rather than at Create(NonTerminal) because
+            // this encompasses all of the former's cache hits but will get other cache hits as well
+
+            IParserNode existing;
+            if (this.cache.TryGetValue(rules, out existing))
+            {
+                return existing;
+            }
+
+            var created = this.CreateParserNodeNoCache(rules);
+            // so far I haven't hit a case where in computing a node I end up needing that node again. If that case
+            // came up we might want to do something like put a "stub" node in the cache and return that, then fill it in
+            // here to stop the recursion
+            this.cache.Add(rules, created);
+            return created;
+        }
+
+        private IParserNode CreateParserNodeNoCache(IReadOnlyList<PartialRule> rules)
         {
             // if we only have one rule, we just parse that
             if (rules.Count == 1)

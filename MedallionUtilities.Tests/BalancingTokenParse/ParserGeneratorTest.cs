@@ -44,7 +44,8 @@ namespace Medallion.BalancingTokenParse
                 new Rule(ExpList),
                 new Rule(ExpList, Exp, ExpList)
             };
-            var parser = new ParserGenerator(rules).Create();
+            var nodes = ParserBuilder.CreateParser(rules);
+            var parser = new ParserNodeParser(nodes, Start);
 
             var listener = new TreeListener();
             parser.Parse(new[] { ID, SEMICOLON, OPEN_BRACKET, ID, OPEN_BRACKET, ID, ID, CLOSE_BRACKET, CLOSE_BRACKET, SEMICOLON }, listener);
