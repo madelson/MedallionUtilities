@@ -16,7 +16,7 @@ namespace Playground.BalancingTokenParse
             var allSymbols = rules.SelectMany(r => new[] { r.Produced }.Concat(r.Symbols))
                 .Distinct()
                 .ToArray();
-            var startSymbol = allSymbols.OfType<NonTerminal>().Single(s => !rules.Any(r => r.Symbols.Contains(s)));
+            var startSymbol = allSymbols.OfType<NonTerminal>().Single(s => !rules.Any(r => r.Produced != s && r.Symbols.Contains(s)));
 
             // first computation
             var firsts = allSymbols.ToDictionary(

@@ -15,7 +15,9 @@ namespace Medallion.BalancingTokenParse
             OPEN_BRACKET = new Token("["),
             CLOSE_BRACKET = new Token("]"),
             SEMICOLON = new Token(";"),
-            COMMA = new Token(",");
+            COMMA = new Token(","),
+            LT = new Token("<"),
+            GT = new Token(">");
 
         private static readonly NonTerminal Exp = new NonTerminal("Exp"),
             ExpList = new NonTerminal("List<Exp>"),
@@ -89,6 +91,51 @@ namespace Medallion.BalancingTokenParse
             parser2.Parse(new[] { OPEN_BRACKET, OPEN_BRACKET, ID, SEMICOLON, CLOSE_BRACKET, OPEN_BRACKET, OPEN_BRACKET, CLOSE_BRACKET, ID, CLOSE_BRACKET, CLOSE_BRACKET, SEMICOLON }, listener2);
             this.output.WriteLine(listener2.Root.Flatten().ToString());
             listener2.Root.Flatten().ToString().ShouldEqual("Start(Stmt(Exp([, List<Exp>(Exp([, Stmt(Exp(ID), ;), List<Stmt>(), ]), Exp([, List<Exp>(Exp([, List<Exp>(), ]), Exp(ID)), ])), ]), ;))");
+        }
+
+        [Fact]
+        public void TestGenericsAmbiguity()
+        {
+            var name = new NonTerminal("Name");
+            var nameListOption = new NonTerminal("Opt<List<Name>>");
+            var nameList = new NonTerminal("List<Name>");
+            var genericParameters = new NonTerminal("Gen");
+            var optionalGenericParameters = new NonTerminal("Opt<Gen>");
+
+            var rules = new[]
+            {
+                new Rule(Exp, name),
+                new Rule(name, ID, optionalGenericParameters),
+                new Rule(optionalGenericParameters),
+                new Rule(optionalGenericParameters, genericParameters),
+                new Rule(genericParameters, LT, nameListOption, GT),
+                new Rule(nameListOption),
+                new Rule(nameListOption, nameList),
+                new Rule(nameList, name),
+                new Rule(nameList, name, COMMA, nameList)
+            };
+
+            var nodes1 = ParserBuilder.CreateParser(rules);
+            var parser1 = new ParserNodeParser(nodes1, Exp, this.output.WriteLine);
+            var listener1 = new TreeListener();
+            parser1.Parse(new[] { ID, LT, ID, COMMA, ID, GT }, listener1);
+            this.output.WriteLine(listener1.Root.Flatten().ToString());
+            listener1.Root.Flatten().ToString().ShouldEqual("Exp(Name(ID, Opt<Gen>(Gen(<, Opt<List<Name>>(List<Name>(Name(ID, Opt<Gen>()), ,, Name(ID, Opt<Gen>()))), >))))");
+
+            var cmp = new NonTerminal("Cmp");
+            var ambiguousRules = rules.Concat(new[]
+                {
+                    new Rule(cmp, LT),
+                    new Rule(cmp, GT),
+                    new Rule(Exp, ID, cmp, Exp),
+                })
+                .ToArray();
+
+            // TODO I think the issue here is that when we create discriminators we don't inherit follow from the
+            // outer symbol. This was to allow for prefix substitution later. I think it will work if we do inherit
+            // but then when doing MapSymbolRules we check for compliance (all nextof(suffix) in followof(prefix/discriminator))
+
+            var nodes2 = ParserBuilder.CreateParser(ambiguousRules);
         }
     }
 }
