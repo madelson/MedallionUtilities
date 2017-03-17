@@ -44,7 +44,7 @@ namespace Playground.BalancingTokenParse
 
         private IParserNode CreateParserNode(NonTerminal symbol)
         {
-            // don't recompute if we already have; this is important for making sure 
+            // don't recompute if we already have; this is important for making sure we don't stack-overflow
             IParserNode existing;
             if (this.result.TryGetValue(symbol, out existing)) { return existing; }
 
@@ -99,7 +99,7 @@ namespace Playground.BalancingTokenParse
 
             if (prefixLength > 0 && !rules[0].Symbols.Take(prefixLength).All(r => r is Token))
             {
-                return new ParseSymbolNode(
+                return new ParsePrefixSymbolsNode(
                     rules[0].Symbols.Take(prefixLength),
                     this.CreateParserNode(rules.Select(r => new PartialRule(r, start: prefixLength)).ToArray())
                 );
@@ -118,14 +118,15 @@ namespace Playground.BalancingTokenParse
                     // first parse the discriminator
                     var discriminatorParse = this.CreateParserNode(match.discriminator);
                     // then map it's result to determine how to parse the remaining symbols
-                    return new MapResultNode(
+                    var mapResultNode = new MapResultNode(
                         discriminatorParse,
-                        match.mapping.GroupBy(kvp => kvp.Value, kvp => kvp.Key)
+                        match.mapping.GroupBy(kvp => kvp.Value, kvp => new PartialRule(kvp.Key, start: kvp.Value.Symbols.Count))
                             .ToDictionary(
                                 g => g.Key,
                                 g => this.CreateParserNode(g.ToArray())
                             )
                     );
+                    return mapResultNode;
                 }
             }
 

@@ -70,8 +70,24 @@ namespace Medallion.BalancingTokenParse
                 new Rule(StmtList, Stmt, StmtList)
             };
 
-            ParserBuilder.CreateParser(rules);
+            var nodes = ParserBuilder.CreateParser(rules);
             //var parser = new ParserGenerator(rules).Create();
+
+            var parser1 = new ParserNodeParser(nodes, Start);
+            var listener1 = new TreeListener();
+            // [];
+            parser1.Parse(new[] { OPEN_BRACKET, CLOSE_BRACKET, SEMICOLON }, listener1);
+            this.output.WriteLine(listener1.Root.Flatten().ToString());
+            listener1.Root.Flatten().ToString().ShouldEqual("Start(Stmt(Exp([, List<Exp>(), ]), ;))");
+
+            this.output.WriteLine(Environment.NewLine + "///////////////// CASE 2 /////////////////" + Environment.NewLine);
+
+            var parser2 = new ParserNodeParser(nodes, Start, this.output.WriteLine);
+            var listener2 = new TreeListener();
+            // [ [ id; ] [ [] id ] ];
+            parser2.Parse(new[] { OPEN_BRACKET, OPEN_BRACKET, ID, SEMICOLON, CLOSE_BRACKET, OPEN_BRACKET, OPEN_BRACKET, CLOSE_BRACKET, ID, CLOSE_BRACKET, CLOSE_BRACKET, SEMICOLON }, listener2);
+            this.output.WriteLine(listener2.Root.Flatten().ToString());
+            listener2.Root.Flatten().ToString().ShouldEqual("Start(Stmt(Exp([, List<Exp>(Exp([, Stmt(Exp(ID), ;), List<Stmt>(), ]), Exp([, List<Exp>(Exp([, List<Exp>(), ]), Exp(ID)), ])), ]), ;))");
         }
     }
 }

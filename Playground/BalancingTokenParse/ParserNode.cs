@@ -36,9 +36,9 @@ namespace Playground.BalancingTokenParse
         public override string ToString() => $"Parse({this.Rule})";
     }
 
-    internal sealed class ParseSymbolNode : IParserNode
+    internal sealed class ParsePrefixSymbolsNode : IParserNode
     {
-        public ParseSymbolNode(IEnumerable<Symbol> prefixSymbols, IParserNode suffixNode)
+        public ParsePrefixSymbolsNode(IEnumerable<Symbol> prefixSymbols, IParserNode suffixNode)
         {
             this.PrefixSymbols = prefixSymbols.ToArray();
             this.SuffixNode = suffixNode;
