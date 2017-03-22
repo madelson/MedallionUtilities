@@ -14,6 +14,8 @@ namespace Medallion.BalancingTokenParse
         private static readonly Token ID = new Token("ID"),
             OPEN_BRACKET = new Token("["),
             CLOSE_BRACKET = new Token("]"),
+            OPEN_PAREN = new Token("("),
+            CLOSE_PAREN = new Token(")"),
             SEMICOLON = new Token(";"),
             COMMA = new Token(","),
             LT = new Token("<"),
@@ -93,6 +95,7 @@ namespace Medallion.BalancingTokenParse
             listener2.Root.Flatten().ToString().ShouldEqual("Start(Stmt(Exp([, List<Exp>(Exp([, Stmt(Exp(ID), ;), List<Stmt>(), ]), Exp([, List<Exp>(Exp([, List<Exp>(), ]), Exp(ID)), ])), ]), ;))");
         }
 
+        // tests parsing a non-ambiguous grammar with both generics and comparison
         [Fact]
         public void TestGenericsAmbiguity()
         {
@@ -141,6 +144,46 @@ namespace Medallion.BalancingTokenParse
             listener2.Root.Flatten()
                 .ToString()
                 .ShouldEqual("Exp(ID, Cmp(<), Exp(Name(ID, Opt<Gen>(Gen(<, Opt<List<Name>>(List<Name>(Name(ID, Opt<Gen>(Gen(<, Opt<List<Name>>(List<Name>(Name(ID, Opt<Gen>()))), >))))), >)))))");
+        }
+
+        // C# generics creates an ambiguity like
+        // f(g<h, i>(j))
+        // in this case, we create a similar but simpler grammar with a similar ambiguity
+        // f<g>(h) (could be call(f<g>, h) or compare(f, compare(g, h))
+        [Fact]
+        public void TestTrueGenericsAmbiguity()
+        {
+            var name = new NonTerminal("Name");
+            var argList = new NonTerminal("List<Exp>");
+            var genericParameters = new NonTerminal("Gen");
+            var optionalGenericParameters = new NonTerminal("Opt<Gen>");
+            var cmp = new NonTerminal("Cmp");
+
+            var rules = new[]
+            {
+                new Rule(Start, Exp),
+
+                new Rule(Exp, ID),
+                new Rule(Exp, OPEN_PAREN, Exp, CLOSE_PAREN),
+                new Rule(Exp, ID, cmp, Exp),
+                new Rule(Exp, name, OPEN_PAREN, argList, CLOSE_PAREN),
+
+                new Rule(cmp, LT),
+                new Rule(cmp, GT),
+
+                new Rule(argList, Exp),
+                new Rule(argList, Exp, COMMA, argList),
+
+                new Rule(name, ID, optionalGenericParameters),
+
+                new Rule(optionalGenericParameters),
+                new Rule(optionalGenericParameters, genericParameters),
+
+                new Rule(genericParameters, LT, ID, GT)
+            };
+
+            // currently this fails due to duplicate prefixes
+            Assert.Throws<ArgumentException>(() => ParserBuilder.CreateParser(rules));
         }
     }
 }

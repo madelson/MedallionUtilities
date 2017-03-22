@@ -17,6 +17,7 @@ namespace Playground.BalancingTokenParse
         private readonly Dictionary<NonTerminal, List<DiscriminatorPrefixInfo>> discriminatorSymbols = new Dictionary<NonTerminal, List<DiscriminatorPrefixInfo>>();
         private readonly Dictionary<IReadOnlyCollection<PartialRule>, IParserNode> cache =
             new Dictionary<IReadOnlyCollection<PartialRule>, IParserNode>(EqualityComparers.GetCollectionComparer<PartialRule>());
+        private readonly Dictionary<NonTerminal, Tuple<NonTerminal, Token>> discriminatorContexts = new Dictionary<NonTerminal, Tuple<NonTerminal, Token>>();
 
         private ParserBuilder(IEnumerable<Rule> rules)
         {
@@ -198,6 +199,7 @@ namespace Playground.BalancingTokenParse
 
                         var prefixInfo = new DiscriminatorPrefixInfo { Symbol = newSubDiscriminator };
                         this.discriminatorSymbols[match.discriminator].Add(prefixInfo);
+                        this.discriminatorContexts.Add(newSubDiscriminator, Tuple.Create(produced, lookaheadToken));
 
                         mappingToUse = match.mapping.ToDictionary(kvp => kvp.Key, kvp => this.rules[newSubDiscriminator].Single(r => r.Symbols.SequenceEqual(kvp.Value.Symbols)));
 
@@ -233,6 +235,10 @@ namespace Playground.BalancingTokenParse
 
             var suffixToRuleMapping = rules.SelectMany(r => this.GatherPostTokenSuffixes(lookaheadToken, r), (r, suffix) => new { r, suffix })
                 // note: this will throw if two rules have the same suffix, but it's not very elegant
+                // note: this could be resolvable in some cases. Basically it needs to be the case that:
+                // (a) the rules with the same suffix have entirely disjoint follow sets
+                // (b) we can successfully proceed by dropping the duplicate suffixes
+                // this would require a new type of node or at least modification to the node tree 
                 .ToDictionary(t => t.suffix, t => t.r, (IEqualityComparer<IReadOnlyList<Symbol>>)EqualityComparers.GetSequenceComparer<Symbol>());
 
             // create the discriminator symbol
@@ -241,6 +247,7 @@ namespace Playground.BalancingTokenParse
             var rulesAndFollowSets = suffixToRuleMapping.ToDictionary(kvp => new Rule(discriminator, kvp.Key), kvp => this.firstFollow.FollowOf(kvp.Value.Rule));
             this.rules.Add(discriminator, rulesAndFollowSets.Keys.ToArray());
             this.firstFollow.Register(rulesAndFollowSets);
+            this.discriminatorContexts.Add(discriminator, Tuple.Create(rules.Only(r => r.Produced), lookaheadToken));
             this.remainingSymbols.Enqueue(discriminator);
             
             return new GrammarLookaheadNode(
@@ -354,7 +361,7 @@ namespace Playground.BalancingTokenParse
 
         private string DebugGrammar => string.Join(
             Environment.NewLine + Environment.NewLine,
-            this.rules.Select(kvp => $"{kvp.Key}:{Environment.NewLine}" + string.Join(Environment.NewLine, kvp.Value.Select(r => "\t" + r)))
+            this.rules.Select(kvp => $"{kvp.Key}{(this.discriminatorContexts.ContainsKey(kvp.Key) ? $" ({this.discriminatorContexts[kvp.Key].Item1} on {this.discriminatorContexts[kvp.Key].Item2})" : string.Empty)}:{Environment.NewLine}" + string.Join(Environment.NewLine, kvp.Value.Select(r => "\t" + r)))
         );
 
         private class DiscriminatorPrefixInfo
