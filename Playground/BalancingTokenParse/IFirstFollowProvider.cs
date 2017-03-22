@@ -11,6 +11,7 @@ namespace Playground.BalancingTokenParse
     {
         IImmutableSet<Token> FirstOf(Symbol symbol);
         IImmutableSet<Token> FollowOf(Symbol symbol);
+        IImmutableSet<Token> FollowOf(Rule rule);
     }
 
     static class FirstFollowProviderExtensions
@@ -49,7 +50,7 @@ namespace Playground.BalancingTokenParse
         {
             var firsts = provider.FirstOf(partialRule.Symbols);
             return firsts.ContainsDefault()
-                ? firsts.RemoveDefault().Union(provider.FollowOf(partialRule.Produced))
+                ? firsts.RemoveDefault().Union(provider.FollowOf(partialRule.Rule))
                 : firsts;
         }
     }

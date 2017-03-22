@@ -118,5 +118,6 @@ namespace Playground.BalancingTokenParse
 
         public IImmutableSet<Token> FirstOf(Symbol symbol) => this.First[symbol];
         public IImmutableSet<Token> FollowOf(Symbol symbol) => this.Follow[symbol];
+        public IImmutableSet<Token> FollowOf(Rule rule) => this.FollowOf(rule.Produced);
     }
 }

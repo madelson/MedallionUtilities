@@ -130,12 +130,17 @@ namespace Medallion.BalancingTokenParse
                     new Rule(Exp, ID, cmp, Exp),
                 })
                 .ToArray();
-
-            // TODO I think the issue here is that when we create discriminators we don't inherit follow from the
-            // outer symbol. This was to allow for prefix substitution later. I think it will work if we do inherit
-            // but then when doing MapSymbolRules we check for compliance (all nextof(suffix) in followof(prefix/discriminator))
-
+            
+            this.output.WriteLine("*********** MORE AMBIGUOUS CASE ***********");
             var nodes2 = ParserBuilder.CreateParser(ambiguousRules);
+            var parser2 = new ParserNodeParser(nodes2, Exp, this.output.WriteLine);
+            var listener2 = new TreeListener();
+            // id < id<id<id>>
+            parser2.Parse(new[] { ID, LT, ID, LT, ID, LT, ID, GT, GT }, listener2);
+            this.output.WriteLine(listener2.Root.Flatten().ToString());
+            listener2.Root.Flatten()
+                .ToString()
+                .ShouldEqual("Exp(ID, Cmp(<), Exp(Name(ID, Opt<Gen>(Gen(<, Opt<List<Name>>(List<Name>(Name(ID, Opt<Gen>(Gen(<, Opt<List<Name>>(List<Name>(Name(ID, Opt<Gen>()))), >))))), >)))))");
         }
     }
 }

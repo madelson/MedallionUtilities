@@ -162,6 +162,11 @@ namespace Playground.BalancingTokenParse
                     ? additional
                     : this.originalGrammarProvider.FollowOf(symbol);
             }
+
+            public IImmutableSet<Token> FollowOf(Rule rule)
+            {
+                return this.FollowOf(rule.Produced);
+            }
         }
     }
 }
