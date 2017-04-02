@@ -49,7 +49,7 @@ namespace Medallion.BalancingTokenParse
                 new Rule(ExpList, Exp, ExpList)
             };
             var nodes = ParserBuilder.CreateParser(rules);
-            var parser = new ParserNodeParser(nodes, Start);
+            var parser = new ParserNodeParser(nodes, Start, this.output.WriteLine);
 
             var listener = new TreeListener();
             parser.Parse(new[] { ID, SEMICOLON, OPEN_BRACKET, ID, OPEN_BRACKET, ID, ID, CLOSE_BRACKET, CLOSE_BRACKET, SEMICOLON }, listener);
@@ -192,7 +192,7 @@ namespace Medallion.BalancingTokenParse
                 {
                     {
                         // note: this is more minimal than ideal; id<id>() is not ambiguous
-                        new[] { ID, LT, ID, GT, OPEN_PAREN },
+                        new[] { ID, LT, ID, GT, OPEN_PAREN, ID },
                         rules.Single(r => r.Symbols.SequenceEqual(new Symbol[] { name, OPEN_PAREN, argList, CLOSE_PAREN }))
                     },
                 }
@@ -204,6 +204,55 @@ namespace Medallion.BalancingTokenParse
             parser.Parse(new[] { ID, LT, ID, GT, OPEN_PAREN, ID, CLOSE_PAREN }, listener);
             this.output.WriteLine(listener.Root.Flatten().ToString());
             listener.Root.Flatten().ToString().ShouldEqual("Start(Exp(Name(ID, Opt<Gen>(Gen(<, ID, >))), (, List<Exp>(Exp(ID)), )))");
+        }
+
+        /// <summary>
+        /// Tests parsing an ambiguous grammar with a casting ambiguity similar to what we have in C#/Java
+        /// 
+        /// E. g. (x)-y could be casting -y to x or could be subtracting y from x.
+        /// </summary>
+        [Fact]
+        public void TestCastAmbiguity()
+        {
+            var cast = new NonTerminal("Cast");
+            var term = new NonTerminal("Term");
+            var minus = new Token("-");
+
+            var rules = new[]
+            {
+                new Rule(Start, Exp),
+
+                new Rule(Exp, term),
+                new Rule(Exp, term, minus, Exp),
+
+                new Rule(term, ID),
+                new Rule(term, OPEN_PAREN, Exp, CLOSE_PAREN),
+                new Rule(term, cast),
+
+                new Rule(cast, OPEN_PAREN, ID, CLOSE_PAREN, Exp),
+            };
+
+            var ex = Assert.Throws<NotSupportedException>(() => ParserBuilder.CreateParser(rules));
+            this.output.WriteLine(ex.Message);
+
+            var nodes = ParserBuilder.CreateParser(
+                rules,
+                new Dictionary<IReadOnlyList<Symbol>, Rule>
+                {
+                    {
+                        new[] { term },
+                        rules.Single(r => r.Symbols.SequenceEqual(new Symbol[] { term, minus, Exp }))
+                    },
+                }
+            );
+            var parser = new ParserNodeParser(nodes, Start, this.output.WriteLine);
+            var listener = new TreeListener();
+
+            // (id)((id) - id)
+            parser.Parse(new[] { OPEN_PAREN, ID, CLOSE_PAREN, OPEN_PAREN, OPEN_PAREN, ID, CLOSE_PAREN, minus, ID, CLOSE_PAREN }, listener);
+            this.output.WriteLine(listener.Root.Flatten().ToString());
+            listener.Root.Flatten().ToString()
+                .ShouldEqual("Start(Exp(Term(Cast((, ID, ), Exp(Term((, Exp(Term((, Exp(Term(ID)), )), -, Exp(Term(ID))), )))))))");
         }
     }
 }

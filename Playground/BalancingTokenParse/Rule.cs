@@ -25,6 +25,7 @@ namespace Playground.BalancingTokenParse
         public override string ToString() => $"{this.Produced} -> {string.Join(" ", this.Symbols)}";
     }
 
+    // TODO I don't think this has to support prefix rules at all, just suffix rules
     class PartialRule
     {
         private IReadOnlyList<Symbol> cachedSymbols;

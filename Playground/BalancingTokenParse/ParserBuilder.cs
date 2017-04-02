@@ -18,7 +18,7 @@ namespace Playground.BalancingTokenParse
         private readonly Dictionary<NonTerminal, List<DiscriminatorPrefixInfo>> discriminatorSymbols = new Dictionary<NonTerminal, List<DiscriminatorPrefixInfo>>();
         private readonly Dictionary<IReadOnlyCollection<PartialRule>, IParserNode> cache =
             new Dictionary<IReadOnlyCollection<PartialRule>, IParserNode>(EqualityComparers.GetCollectionComparer<PartialRule>());
-        private readonly Dictionary<NonTerminal, Tuple<NonTerminal, Token>> discriminatorContexts = new Dictionary<NonTerminal, Tuple<NonTerminal, Token>>();
+        private readonly Dictionary<NonTerminal, DiscriminatorContext> discriminatorContexts = new Dictionary<NonTerminal, DiscriminatorContext>();
 
         private ParserBuilder(
             IEnumerable<Rule> rules,
@@ -54,10 +54,10 @@ namespace Playground.BalancingTokenParse
 
         private IParserNode CreateParserNode(NonTerminal symbol)
         {
-            return this.CreateParserNode(this.rules[symbol].Select(r => new PartialRule(r)).ToArray());
+            return this.CreateParserNode(this.rules[symbol].Select(r => new PartialRule(r)).ToArray(), prefix: ImmutableList<Symbol>.Empty);
         }
 
-        private IParserNode CreateParserNode(IReadOnlyList<PartialRule> rules)
+        private IParserNode CreateParserNode(IReadOnlyList<PartialRule> rules, ImmutableList<Symbol> prefix)
         {
             // it's important to cache at this level rather than at Create(NonTerminal) because
             // this encompasses all of the former's cache hits but will get other cache hits as well
@@ -65,10 +65,11 @@ namespace Playground.BalancingTokenParse
             IParserNode existing;
             if (this.cache.TryGetValue(rules, out existing))
             {
+                // todo do we need to consider prefix here?
                 return existing;
             }
 
-            var created = this.CreateParserNodeNoCache(rules);
+            var created = this.CreateParserNodeNoCache(rules, prefix);
             // so far I haven't hit a case where in computing a node I end up needing that node again. If that case
             // came up we might want to do something like put a "stub" node in the cache and return that, then fill it in
             // here to stop the recursion
@@ -76,7 +77,7 @@ namespace Playground.BalancingTokenParse
             return created;
         }
 
-        private IParserNode CreateParserNodeNoCache(IReadOnlyList<PartialRule> rules)
+        private IParserNode CreateParserNodeNoCache(IReadOnlyList<PartialRule> rules, ImmutableList<Symbol> prefix)
         {
             // if we only have one rule, we just parse that
             if (rules.Count == 1)
@@ -93,7 +94,7 @@ namespace Playground.BalancingTokenParse
             // we know that this must be non-LL(1) because we already checked for the single-rule case above
             if (tokenLookaheadTable.Count == 1)
             {
-                return this.CreateNonLL1ParserNode(tokenLookaheadTable.Single().Key, tokenLookaheadTable.Single().Value);
+                return this.CreateNonLL1ParserNode(tokenLookaheadTable.Single().Key, tokenLookaheadTable.Single().Value, prefix);
             }
 
             // else, create a token lookahead node mapping from the table
@@ -102,18 +103,19 @@ namespace Playground.BalancingTokenParse
                     kvp => kvp.Key,
                     kvp => kvp.Value.Length == 1
                         ? new ParseRuleNode(kvp.Value.Single())
-                        : this.CreateNonLL1ParserNode(kvp.Key, kvp.Value)
+                        : this.CreateNonLL1ParserNode(kvp.Key, kvp.Value, prefix)
                 )
             );
         }
         
-        private IParserNode CreateNonLL1ParserNode(Token lookaheadToken, IReadOnlyList<PartialRule> rules)
+        private IParserNode CreateNonLL1ParserNode(Token lookaheadToken, IReadOnlyList<PartialRule> rules, ImmutableList<Symbol> prefix)
         {
             // sanity checks
             if (rules.Count <= 1) { throw new ArgumentException(nameof(rules), "must be more than one"); }
             var produced = rules.Only(r => r.Produced);
 
             // look for a common prefix containing non-terminals (we reserve token-only prefixes for transformation into discriminators)
+            // TODO I'm not sure we should be stopping token-only prefixes from going through here
 
             var prefixLength = Enumerable.Range(0, count: rules.Min(r => r.Symbols.Count))
                 .TakeWhile(i => rules.Skip(1).All(r => r.Symbols[i] == rules[0].Symbols[i]))
@@ -122,9 +124,10 @@ namespace Playground.BalancingTokenParse
 
             if (prefixLength > 0 && !rules[0].Symbols.Take(prefixLength).All(r => r is Token))
             {
+                var extendedPrefix = prefix.AddRange(rules[0].Symbols.Take(prefixLength));
                 return new ParsePrefixSymbolsNode(
                     rules[0].Symbols.Take(prefixLength),
-                    this.CreateParserNode(rules.Select(r => new PartialRule(r, start: prefixLength)).ToArray())
+                    this.CreateParserNode(rules.Select(r => new PartialRule(r, start: prefixLength)).ToArray(), prefix: extendedPrefix)
                 );
             }
 
@@ -159,6 +162,7 @@ namespace Playground.BalancingTokenParse
                     
                     Dictionary<PartialRule, Rule> mappingToUse;
                     IParserNode discriminatorParse;
+                    NonTerminal prefixDiscriminator;
                     DiscriminatorPrefixInfo existingPrefixInfo;
                     if (followMapping.All(kvp => kvp.Value.Except(this.firstFollow.FollowOf(kvp.Key)).Count == 0))
                     {
@@ -167,6 +171,7 @@ namespace Playground.BalancingTokenParse
                         // GrammarLookahead nodes for them inside a lookahead)
                         mappingToUse = match.mapping;
                         discriminatorParse = new ParseSymbolNode(match.discriminator);
+                        prefixDiscriminator = match.discriminator;
                     }
                     else if ((existingPrefixInfo = this.discriminatorSymbols[match.discriminator]
                         .FirstOrDefault(
@@ -191,8 +196,11 @@ namespace Playground.BalancingTokenParse
                         }
                         else
                         {
-                            discriminatorParse = this.CreateNonLL1ParserNode(lookaheadToken, mappingToUse.Values.Distinct().Select(r => new PartialRule(r)).ToArray());
+                            discriminatorParse = this.CreateNonLL1ParserNode(lookaheadToken, mappingToUse.Values.Distinct().Select(r => new PartialRule(r)).ToArray(), prefix);
+                            existingPrefixInfo.NodeCache.Add(lookaheadToken, discriminatorParse);
                         }
+
+                        prefixDiscriminator = existingPrefixInfo.Symbol;
                     }
                     else
                     {
@@ -206,7 +214,7 @@ namespace Playground.BalancingTokenParse
 
                         var prefixInfo = new DiscriminatorPrefixInfo { Symbol = newSubDiscriminator };
                         this.discriminatorSymbols[match.discriminator].Add(prefixInfo);
-                        this.discriminatorContexts.Add(newSubDiscriminator, Tuple.Create(produced, lookaheadToken));
+                        this.discriminatorContexts.Add(newSubDiscriminator, new DiscriminatorContext(outerSymbol: produced, prefix: prefix, lookaheadToken: lookaheadToken));
 
                         mappingToUse = match.mapping.ToDictionary(kvp => kvp.Key, kvp => this.rules[newSubDiscriminator].Single(r => r.Symbols.SequenceEqual(kvp.Value.Symbols)));
 
@@ -214,17 +222,19 @@ namespace Playground.BalancingTokenParse
                         // set of rules isn't differentiable using LL(1) techniques then neither is the set of prefix rules! Furthermore, it's important that
                         // we compute a parse node ONLY for the current lookahead token, since sub discriminators might not be generally parseable under the full
                         // set of possible lookahead tokens
-                        discriminatorParse = this.CreateNonLL1ParserNode(lookaheadToken, mappingToUse.Values.Distinct().Select(r => new PartialRule(r)).ToArray());
+                        discriminatorParse = this.CreateNonLL1ParserNode(lookaheadToken, mappingToUse.Values.Distinct().Select(r => new PartialRule(r)).ToArray(), prefix);
                         prefixInfo.NodeCache.Add(lookaheadToken, discriminatorParse);
+                        prefixDiscriminator = newSubDiscriminator;
                     }
-                    
+
                     // map the discriminatorParse result to determine how to parse the remaining symbols
+                    var prefixWithPrefixDiscriminator = prefix.Add(prefixDiscriminator);
                     var mapResultNode = new MapResultNode(
                         discriminatorParse,
                         mappingToUse.GroupBy(kvp => kvp.Value, kvp => new PartialRule(kvp.Key, start: kvp.Value.Symbols.Count))
                             .ToDictionary(
                                 g => g.Key,
-                                g => this.CreateParserNode(g.ToArray())
+                                g => this.CreateParserNode(g.ToArray(), prefix: prefixWithPrefixDiscriminator)
                             )
                     );
                     return mapResultNode;
@@ -234,18 +244,18 @@ namespace Playground.BalancingTokenParse
             try
             {
                 // otherwise, we will need to create a new node as part of the lookahead grammar
-                return this.CreateGrammarLookaheadParserNode(lookaheadToken, rules);
+                return this.CreateGrammarLookaheadParserNode(lookaheadToken, rules, prefix);
             }
             catch (NotSupportedException ex) when (ex.Message.StartsWith("Parsing"))
             {
-                var ambiguityResolutionNode = this.TryCreateExplicitAmbiguityResolutionNode(rules);
+                var ambiguityResolutionNode = this.TryCreateExplicitAmbiguityResolutionNode(rules, prefix, lookaheadToken);
                 if (ambiguityResolutionNode != null) { return ambiguityResolutionNode; }
 
                 throw;
             }
         }
         
-        private IParserNode CreateGrammarLookaheadParserNode(Token lookaheadToken, IReadOnlyList<PartialRule> rules)
+        private IParserNode CreateGrammarLookaheadParserNode(Token lookaheadToken, IReadOnlyList<PartialRule> rules, ImmutableList<Symbol> prefix)
         {
             // sanity checks
             if (rules.Select(r => r.Rule).Distinct().Count() != rules.Count) { throw new ArgumentException(nameof(rules), "must be partials of distinct rules"); }
@@ -270,7 +280,7 @@ namespace Playground.BalancingTokenParse
                 var additionalSuffixMessage = ex is ArgumentException
                     ? ", [common suffix]"
                     : string.Empty;
-                throw new NotSupportedException($"Parsing {context.Item1} on {string.Join(", ", context.Item2)}{additionalSuffixMessage}", ex);
+                throw new NotSupportedException($"Parsing {context.Item1} on {string.Join(", ", context.Item2.Concat(prefix).Append(lookaheadToken))}{additionalSuffixMessage}", ex);
             }
 
             NonTerminal discriminator;
@@ -290,6 +300,7 @@ namespace Playground.BalancingTokenParse
             if (existing != null)
             {
                 discriminator = existing;
+                // todo we should probably register additional discriminator context here
             }
             else
             {
@@ -299,7 +310,7 @@ namespace Playground.BalancingTokenParse
                 var rulesAndFollowSets = suffixToRuleMapping.ToDictionary(kvp => new Rule(discriminator, kvp.Key), kvp => this.firstFollow.FollowOf(kvp.Value.Rule));
                 this.rules.Add(discriminator, rulesAndFollowSets.Keys.ToArray());
                 this.firstFollow.Register(rulesAndFollowSets);
-                this.discriminatorContexts.Add(discriminator, Tuple.Create(rules.Only(r => r.Produced), lookaheadToken));
+                this.discriminatorContexts.Add(discriminator, new DiscriminatorContext(outerSymbol: rules.Only(r => r.Produced), prefix: prefix, lookaheadToken: lookaheadToken));
                 this.remainingSymbols.Enqueue(discriminator);
             }
             
@@ -314,17 +325,19 @@ namespace Playground.BalancingTokenParse
             );
         }
 
-        private IParserNode TryCreateExplicitAmbiguityResolutionNode(IReadOnlyList<PartialRule> rules)
+        private IParserNode TryCreateExplicitAmbiguityResolutionNode(IReadOnlyList<PartialRule> rules, ImmutableList<Symbol> prefix, Token lookaheadToken)
         {
             if (this.ambiguityResolutions.Count == 0) { return null; }
             
-            // NOTE: this isn't full-featured yet; we're not considering prefix cases
-            // NOTE: another oddity here is that we're not considering lookahead token at all. This might be ok because context captures that
+            // TODO: one potential here is that we're not considering lookahead token at all. It's unclear whether we should be
+            // considering lookahead token or something more general. For example, in the case of id<id>(, the token ')' is not ambiguous
+            // but 'id' is
 
             var context = this.GetFullContext(rules.Only(r => r.Produced));
+            var contextSymbols = context.Item2.Concat(prefix).Append(lookaheadToken).ToArray();
 
             // NOTE: unclear whether it's really correct to be looking at suffixes here; exact match only may be sufficient
-            var resolutions = this.ambiguityResolutions.Where(kvp => context.Item2.EndsWith(kvp.Key))
+            var resolutions = this.ambiguityResolutions.Where(kvp => contextSymbols.EndsWith(kvp.Key))
                 .OrderByDescending(kvp => kvp.Key.Count)
                 .Select(kvp => kvp.Value)
                 .ToArray();
@@ -448,17 +461,18 @@ namespace Playground.BalancingTokenParse
             }
         }
 
-        private Tuple<NonTerminal, List<Token>> GetFullContext(NonTerminal symbol)
+        private Tuple<NonTerminal, List<Symbol>> GetFullContext(NonTerminal symbol)
         {
             // note: this doesn't yet handle common prefix nodes or discriminator node stuff...
 
             var resultSymbol = symbol;
-            var resultTokens = new List<Token>();
-            Tuple<NonTerminal, Token> context;
+            var resultTokens = new List<Symbol>();
+            DiscriminatorContext context;
             while (this.discriminatorContexts.TryGetValue(resultSymbol, out context))
             {
-                resultSymbol = context.Item1;
-                resultTokens.Add(context.Item2);
+                resultSymbol = context.OuterSymbol;
+                resultTokens.AddRange(context.Prefix);
+                resultTokens.Add(context.LookaheadToken);
             }
 
             resultTokens.Reverse();
@@ -467,13 +481,30 @@ namespace Playground.BalancingTokenParse
 
         private string DebugGrammar => string.Join(
             Environment.NewLine + Environment.NewLine,
-            this.rules.Select(kvp => $"{kvp.Key}{(this.discriminatorContexts.ContainsKey(kvp.Key) ? $" ({this.discriminatorContexts[kvp.Key].Item1} on {this.discriminatorContexts[kvp.Key].Item2})" : string.Empty)}:{Environment.NewLine}" + string.Join(Environment.NewLine, kvp.Value.Select(r => "\t" + r)))
+            this.rules.Select(kvp => $"{kvp.Key}{(this.discriminatorContexts.ContainsKey(kvp.Key) ? $" ({this.discriminatorContexts[kvp.Key]})" : string.Empty)}:{Environment.NewLine}" + string.Join(Environment.NewLine, kvp.Value.Select(r => "\t" + r)))
         );
 
         private class DiscriminatorPrefixInfo
         {
             public NonTerminal Symbol { get; set; }
             public Dictionary<Token, IParserNode> NodeCache { get; } = new Dictionary<Token, IParserNode>();
+        }
+
+        private class DiscriminatorContext
+        {
+            public DiscriminatorContext(NonTerminal outerSymbol, IReadOnlyList<Symbol> prefix, Token lookaheadToken)
+            {
+                this.OuterSymbol = outerSymbol;
+                this.Prefix = prefix;
+                this.LookaheadToken = lookaheadToken;
+            }
+
+            public NonTerminal OuterSymbol { get; }
+            public IReadOnlyList<Symbol> Prefix { get; }
+            public Token LookaheadToken { get; }
+
+            public override string ToString() =>
+                $"{this.OuterSymbol} on {(this.Prefix.Count > 0 ? string.Join(", ", this.Prefix) + ", then " : string.Empty)}{this.LookaheadToken}";
         }
 
         private class InternalFirstFollowProvider : IFirstFollowProvider
