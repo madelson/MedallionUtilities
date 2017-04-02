@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Medallion
 {
-    static class TestHelper
+    public static class TestHelper
     {
         public static T ShouldEqual<T>(this T actual, T expected, IEqualityComparer<T> comparer = null, int? precision = null)
         {

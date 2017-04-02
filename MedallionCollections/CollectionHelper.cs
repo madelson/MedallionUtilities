@@ -141,6 +141,8 @@ namespace Medallion.Collections
                     {
                         yield return this.NextElement;
                     }
+
+                    yield break;
                 }
 
                 // the algorithm here keeps 2 pieces of state:

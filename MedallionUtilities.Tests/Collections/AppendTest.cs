@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -26,6 +27,15 @@ namespace Medallion.Collections
                 .Prepend('0')
                 .Append("h".Prepend('g').Append('i').Prepend("ef").Append("jk"));
             string.Join(string.Empty, sequence).ShouldEqual("0abcdefghijk");
+        }
+
+        // tests a bug with appending one element to a list built by other means
+        [Fact]
+        public void TestConcatAppend()
+        {
+            var list = new List<object>().Concat(ImmutableList.Create("a"));
+            list.Append("b").SequenceShouldEqual(new[] { "a", "b" });
+            list.Prepend("b").SequenceShouldEqual(new[] { "b", "a" });
         }
 
         [Fact]

@@ -9,8 +9,8 @@
     <projectUrl>https://github.com/madelson/MedallionUtilities/tree/master/MedallionCollections</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Initial release</releaseNotes>
-    <copyright>Copyright 2016</copyright>
+    <releaseNotes>fixed Append() bug</releaseNotes>
+    <copyright>Copyright 2017</copyright>
     <tags>collection linq enumerable comparer utility</tags>
     <dependencies>
     </dependencies>
