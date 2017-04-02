@@ -55,6 +55,8 @@ namespace Playground.BalancingTokenParse
 
             switch (node.Kind)
             {
+                case ParserNodeKind.ParseSymbol:
+                    return this.Parse(((ParseSymbolNode)node).Symbol);
                 case ParserNodeKind.ParseRule:
                     var rule = ((ParseRuleNode)node).Rule;
                     foreach (var symbol in rule.Symbols)

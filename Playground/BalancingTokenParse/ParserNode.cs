@@ -14,11 +14,25 @@ namespace Playground.BalancingTokenParse
 
     internal enum ParserNodeKind
     {
+        ParseSymbol,
         ParseRule,
         ParsePrefixSymbols,
         TokenLookahead,
         GrammarLookahead,
         MapResult,
+    }
+
+    internal sealed class ParseSymbolNode : IParserNode
+    {
+        public ParseSymbolNode(NonTerminal symbol)
+        {
+            this.Symbol = symbol;
+        }
+
+        public NonTerminal Symbol { get; }
+        public ParserNodeKind Kind => ParserNodeKind.ParseSymbol;
+
+        public override string ToString() => $"Parse({this.Symbol})";
     }
 
     internal sealed class ParseRuleNode : IParserNode

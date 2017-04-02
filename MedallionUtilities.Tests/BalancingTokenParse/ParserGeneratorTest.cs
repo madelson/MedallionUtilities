@@ -183,7 +183,27 @@ namespace Medallion.BalancingTokenParse
             };
 
             // currently this fails due to duplicate prefixes
-            Assert.Throws<ArgumentException>(() => ParserBuilder.CreateParser(rules));
+            var ex = Assert.Throws<NotSupportedException>(() => ParserBuilder.CreateParser(rules));
+            this.output.WriteLine(ex.Message);
+
+            var nodes = ParserBuilder.CreateParser(
+                rules,
+                new Dictionary<IReadOnlyList<Symbol>, Rule>
+                {
+                    {
+                        // note: this is more minimal than ideal; id<id>() is not ambiguous
+                        new[] { ID, LT, ID, GT, OPEN_PAREN },
+                        rules.Single(r => r.Symbols.SequenceEqual(new Symbol[] { name, OPEN_PAREN, argList, CLOSE_PAREN }))
+                    },
+                }
+            );
+            var parser = new ParserNodeParser(nodes, Start, this.output.WriteLine);
+            var listener = new TreeListener();
+
+            // compares: id < id > (id) vs. call: id<id>(id) => our resolution says call
+            parser.Parse(new[] { ID, LT, ID, GT, OPEN_PAREN, ID, CLOSE_PAREN }, listener);
+            this.output.WriteLine(listener.Root.Flatten().ToString());
+            listener.Root.Flatten().ToString().ShouldEqual("Start(Exp(Name(ID, Opt<Gen>(Gen(<, ID, >))), (, List<Exp>(Exp(ID)), )))");
         }
     }
 }

@@ -10,6 +10,7 @@ namespace Playground.BalancingTokenParse
 {
     internal class ParserBuilder
     {
+        private readonly IReadOnlyDictionary<IReadOnlyList<Symbol>, Rule> ambiguityResolutions;
         private readonly FirstFollowCalculator baseFirstFollow;
         private readonly InternalFirstFollowProvider firstFollow;
         private readonly Dictionary<NonTerminal, IReadOnlyList<Rule>> rules;
@@ -19,18 +20,24 @@ namespace Playground.BalancingTokenParse
             new Dictionary<IReadOnlyCollection<PartialRule>, IParserNode>(EqualityComparers.GetCollectionComparer<PartialRule>());
         private readonly Dictionary<NonTerminal, Tuple<NonTerminal, Token>> discriminatorContexts = new Dictionary<NonTerminal, Tuple<NonTerminal, Token>>();
 
-        private ParserBuilder(IEnumerable<Rule> rules)
+        private ParserBuilder(
+            IEnumerable<Rule> rules,
+            IEnumerable<KeyValuePair<IReadOnlyList<Symbol>, Rule>> ambiguityResolutions)
         {
             this.rules = rules.GroupBy(r => r.Produced)
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<Rule>)g.ToArray());
             this.baseFirstFollow = new FirstFollowCalculator(this.rules.SelectMany(kvp => kvp.Value).ToArray());
             this.firstFollow = new InternalFirstFollowProvider(this.baseFirstFollow);
             this.remainingSymbols = new Queue<NonTerminal>(this.baseFirstFollow.NonTerminals);
+
+            this.ambiguityResolutions = ambiguityResolutions.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, (IEqualityComparer<IReadOnlyList<Symbol>>)EqualityComparers.GetSequenceComparer<Symbol>());
         }
 
-        public static Dictionary<NonTerminal, IParserNode> CreateParser(IEnumerable<Rule> rules)
+        public static Dictionary<NonTerminal, IParserNode> CreateParser(
+            IEnumerable<Rule> rules,
+            IEnumerable<KeyValuePair<IReadOnlyList<Symbol>, Rule>> ambiguityResolutions = null)
         {
-            return new ParserBuilder(rules).CreateParser();
+            return new ParserBuilder(rules, ambiguityResolutions ?? Enumerable.Empty<KeyValuePair<IReadOnlyList<Symbol>, Rule>>()).CreateParser();
         }
 
         private Dictionary<NonTerminal, IParserNode> CreateParser()
@@ -159,7 +166,7 @@ namespace Playground.BalancingTokenParse
                         // know this is possible because all top-level discriminators must be parseable (since we might encounter
                         // GrammarLookahead nodes for them inside a lookahead)
                         mappingToUse = match.mapping;
-                        discriminatorParse = this.CreateParserNode(match.discriminator);
+                        discriminatorParse = new ParseSymbolNode(match.discriminator);
                     }
                     else if ((existingPrefixInfo = this.discriminatorSymbols[match.discriminator]
                         .FirstOrDefault(
@@ -224,8 +231,18 @@ namespace Playground.BalancingTokenParse
                 }
             }
 
-            // otherwise, we will need to create a new node as part of the lookahead grammar
-            return this.CreateGrammarLookaheadParserNode(lookaheadToken, rules);
+            try
+            {
+                // otherwise, we will need to create a new node as part of the lookahead grammar
+                return this.CreateGrammarLookaheadParserNode(lookaheadToken, rules);
+            }
+            catch (NotSupportedException ex) when (ex.Message.StartsWith("Parsing"))
+            {
+                var ambiguityResolutionNode = this.TryCreateExplicitAmbiguityResolutionNode(rules);
+                if (ambiguityResolutionNode != null) { return ambiguityResolutionNode; }
+
+                throw;
+            }
         }
         
         private IParserNode CreateGrammarLookaheadParserNode(Token lookaheadToken, IReadOnlyList<PartialRule> rules)
@@ -233,22 +250,58 @@ namespace Playground.BalancingTokenParse
             // sanity checks
             if (rules.Select(r => r.Rule).Distinct().Count() != rules.Count) { throw new ArgumentException(nameof(rules), "must be partials of distinct rules"); }
 
-            var suffixToRuleMapping = rules.SelectMany(r => this.GatherPostTokenSuffixes(lookaheadToken, r), (r, suffix) => new { r, suffix })
-                // note: this will throw if two rules have the same suffix, but it's not very elegant
-                // note: this could be resolvable in some cases. Basically it needs to be the case that:
-                // (a) the rules with the same suffix have entirely disjoint follow sets
-                // (b) we can successfully proceed by dropping the duplicate suffixes
-                // this would require a new type of node or at least modification to the node tree 
-                .ToDictionary(t => t.suffix, t => t.r, (IEqualityComparer<IReadOnlyList<Symbol>>)EqualityComparers.GetSequenceComparer<Symbol>());
+            Dictionary<IReadOnlyList<Symbol>, PartialRule> suffixToRuleMapping;
+            try
+            {
+                suffixToRuleMapping = rules.SelectMany(r => this.GatherPostTokenSuffixes(lookaheadToken, r), (r, suffix) => new { r, suffix })
+                    // note: this will throw if two rules have the same suffix, but it's not very elegant
+                    // note: this could be resolvable in some cases. Basically it needs to be the case that:
+                    // (a) the rules with the same suffix have entirely disjoint follow sets
+                    // (b) we can successfully proceed by dropping the duplicate suffixes
+                    // this would require a new type of node or at least modification to the node tree 
+                    .ToDictionary(t => t.suffix, t => t.r, (IEqualityComparer<IReadOnlyList<Symbol>>)EqualityComparers.GetSequenceComparer<Symbol>());
+            }
+            catch (Exception ex) 
+                when (
+                    (ex is NotSupportedException && ex.Message == "can't remove prefix from empty") 
+                    || (ex is ArgumentException && ex.Message == "An item with the same key has already been added."))
+            {
+                var context = this.GetFullContext(rules.Only(r => r.Produced));
+                var additionalSuffixMessage = ex is ArgumentException
+                    ? ", [common suffix]"
+                    : string.Empty;
+                throw new NotSupportedException($"Parsing {context.Item1} on {string.Join(", ", context.Item2)}{additionalSuffixMessage}", ex);
+            }
 
-            // create the discriminator symbol
-            var discriminator = new NonTerminal("T" + this.discriminatorSymbols.Count);
-            this.discriminatorSymbols.Add(discriminator, new List<DiscriminatorPrefixInfo>());
-            var rulesAndFollowSets = suffixToRuleMapping.ToDictionary(kvp => new Rule(discriminator, kvp.Key), kvp => this.firstFollow.FollowOf(kvp.Value.Rule));
-            this.rules.Add(discriminator, rulesAndFollowSets.Keys.ToArray());
-            this.firstFollow.Register(rulesAndFollowSets);
-            this.discriminatorContexts.Add(discriminator, Tuple.Create(rules.Only(r => r.Produced), lookaheadToken));
-            this.remainingSymbols.Enqueue(discriminator);
+            NonTerminal discriminator;
+            
+            // first, see if we already have an equivalent discriminator
+            var comparer = EqualityComparers.GetCollectionComparer(
+                EqualityComparers.GetSequenceComparer<Symbol>()
+            );
+            var existing = this.discriminatorSymbols.Keys
+                // must have an exact rule match (todo could also be a superset)
+                .Where(d => comparer.Equals(this.rules[d].Select(s => s.Symbols), suffixToRuleMapping.Keys))
+                // the matching rule follow sets must be a superset of the incoming rule follow sets
+                .FirstOrDefault(d => suffixToRuleMapping.All(
+                    kvp => this.firstFollow.FollowOf(kvp.Value.Rule)
+                        .Except(this.firstFollow.FollowOf(this.rules[d].Single(r => r.Symbols.SequenceEqual(kvp.Key)))).Count == 0
+                ));
+            if (existing != null)
+            {
+                discriminator = existing;
+            }
+            else
+            {
+                // create the discriminator symbol
+                discriminator = new NonTerminal("T" + this.discriminatorSymbols.Count);
+                this.discriminatorSymbols.Add(discriminator, new List<DiscriminatorPrefixInfo>());
+                var rulesAndFollowSets = suffixToRuleMapping.ToDictionary(kvp => new Rule(discriminator, kvp.Key), kvp => this.firstFollow.FollowOf(kvp.Value.Rule));
+                this.rules.Add(discriminator, rulesAndFollowSets.Keys.ToArray());
+                this.firstFollow.Register(rulesAndFollowSets);
+                this.discriminatorContexts.Add(discriminator, Tuple.Create(rules.Only(r => r.Produced), lookaheadToken));
+                this.remainingSymbols.Enqueue(discriminator);
+            }
             
             return new GrammarLookaheadNode(
                 lookaheadToken,
@@ -259,6 +312,42 @@ namespace Playground.BalancingTokenParse
                     r => suffixToRuleMapping[r.Symbols].Rule
                 )
             );
+        }
+
+        private IParserNode TryCreateExplicitAmbiguityResolutionNode(IReadOnlyList<PartialRule> rules)
+        {
+            if (this.ambiguityResolutions.Count == 0) { return null; }
+            
+            // NOTE: this isn't full-featured yet; we're not considering prefix cases
+            // NOTE: another oddity here is that we're not considering lookahead token at all. This might be ok because context captures that
+
+            var context = this.GetFullContext(rules.Only(r => r.Produced));
+
+            // NOTE: unclear whether it's really correct to be looking at suffixes here; exact match only may be sufficient
+            var resolutions = this.ambiguityResolutions.Where(kvp => context.Item2.EndsWith(kvp.Key))
+                .OrderByDescending(kvp => kvp.Key.Count)
+                .Select(kvp => kvp.Value)
+                .ToArray();
+
+            foreach (var resolved in resolutions)
+            {
+                // we need to determine a best match rather than an exact match because we won't actually be thinking about the resolved
+                // rule at this point; we'll be thinking about a discriminator rule instead
+                var matchScores = rules.ToDictionary(
+                    r => r,
+                    r => r.Symbols.Reverse()
+                        .Select((s, index) => new { s, index })
+                        .TakeWhile(t => t.index < resolved.Symbols.Count && resolved.Symbols[resolved.Symbols.Count - 1 - t.index] == t.s)
+                        .Count()
+                );
+                if (matchScores.Values.All(s => s == 0)) { break; }
+                if (matchScores.Values.Count(s => s == matchScores.Values.Max()) != 1) { throw new NotSupportedException("Multiple best scores"); }
+                return new ParseRuleNode(matchScores.MaxBy(kvp => kvp.Value).Key);
+            }
+
+            if (resolutions.Length > 0) { throw new NotSupportedException("No valid matches"); }
+
+            return null;
         }
 
         private Dictionary<PartialRule, Rule> MapSymbolRules(NonTerminal discriminator, IReadOnlyCollection<PartialRule> toMap)
@@ -359,6 +448,23 @@ namespace Playground.BalancingTokenParse
             }
         }
 
+        private Tuple<NonTerminal, List<Token>> GetFullContext(NonTerminal symbol)
+        {
+            // note: this doesn't yet handle common prefix nodes or discriminator node stuff...
+
+            var resultSymbol = symbol;
+            var resultTokens = new List<Token>();
+            Tuple<NonTerminal, Token> context;
+            while (this.discriminatorContexts.TryGetValue(resultSymbol, out context))
+            {
+                resultSymbol = context.Item1;
+                resultTokens.Add(context.Item2);
+            }
+
+            resultTokens.Reverse();
+            return Tuple.Create(resultSymbol, resultTokens);
+        }
+
         private string DebugGrammar => string.Join(
             Environment.NewLine + Environment.NewLine,
             this.rules.Select(kvp => $"{kvp.Key}{(this.discriminatorContexts.ContainsKey(kvp.Key) ? $" ({this.discriminatorContexts[kvp.Key].Item1} on {this.discriminatorContexts[kvp.Key].Item2})" : string.Empty)}:{Environment.NewLine}" + string.Join(Environment.NewLine, kvp.Value.Select(r => "\t" + r)))
@@ -456,6 +562,15 @@ namespace Playground.BalancingTokenParse
 
                 return value;
             }
+        }
+
+        public static bool EndsWith<TSource>(this IEnumerable<TSource> items, IEnumerable<TSource> suffix, IEqualityComparer<TSource> comparer = null)
+        {
+            var itemsList = (items as IReadOnlyList<TSource>) ?? items.ToArray();
+            var suffixList = (items as IReadOnlyList<TSource>) ?? suffix.ToArray();
+
+            return suffixList.Count <= itemsList.Count
+                && itemsList.Skip(itemsList.Count - suffixList.Count).SequenceEqual(suffixList, comparer);
         }
     }
 }
