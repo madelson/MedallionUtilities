@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Medallion.BalancingTokenParse;
 using Playground.BalancingTokenParse;
 
-namespace Medallion.BalancingTokenParse
+namespace Medallion.BalancingTokenParse.Tests
 {
     class TreeListener : IParserListener
     {

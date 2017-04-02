@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Medallion.BalancingTokenParse
+namespace Medallion.BalancingTokenParse.Tests
 {
     public class ParserGeneratorTest
     {
