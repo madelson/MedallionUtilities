@@ -128,6 +128,178 @@ namespace Playground.AsyncLinq
             }
         }
 
+        public static IAsyncEnumerable<T> OrderByCompletion<T>(this IEnumerable<Task<T>> source)
+        {
+            throw new NotImplementedException("partial below");
+        }
+
+        private sealed class OrderByCompletionAsyncEnumerable<T> : IAsyncEnumerable<T>
+        {
+            private readonly IEnumerable<Task<T>> source;
+
+            public OrderByCompletionAsyncEnumerable(IEnumerable<Task<T>> source)
+            {
+                this.source = source;
+            }
+
+            IAsyncEnumerator<T> IAsyncEnumerable<T>.GetEnumerator()
+            {
+                throw new NotImplementedException();
+            }
+
+            private sealed class Enumerator : IAsyncEnumerator<T>
+            {
+                private readonly object @lock = new object();
+                private IEnumerable<Task<T>> source;
+                private Queue<Task<T>> queue;
+                private int pendingCount;
+                private TaskCompletionSource<bool> moveNextTaskBuilder;
+                private Task<T> currentTask;
+
+                public Enumerator(IEnumerable<Task<T>> source)
+                {
+                    this.source = source;
+                }
+
+                T IAsyncEnumerator<T>.Current
+                {
+                    get
+                    {
+                        lock (this.@lock)
+                        {
+                            if (this.pendingCount < 0)
+                            {
+                                throw new ObjectDisposedException(this.GetType().ToString());
+                            }
+                            throw new NotImplementedException();
+                        }
+                    }
+                }
+
+                void IDisposable.Dispose()
+                {
+                    this.source = null; // prevent initialization
+                    var queue = this.queue;
+                    if (this.queue != null)
+                    {
+                        lock (this.queue)
+                        {
+                            this.queue.Clear();
+                            this.pendingCount = -1;
+                            this.moveNextTaskBuilder?.SetException(new ObjectDisposedException(this.GetType().ToString()));
+                            this.moveNextTaskBuilder = null;
+                            this.currentTask = null;
+                        }
+                    }
+                }
+
+                Task<bool> IAsyncEnumerator<T>.MoveNextAsync()
+                {
+                    if (this.source != null)
+                    {
+                        this.Initialize();
+                    }
+
+                    lock (this.queue)
+                    {
+                        if (this.pendingCount < 0)
+                        {
+                            throw new ObjectDisposedException(this.GetType().ToString());
+                        }
+
+                        // case 1: we have something queued up
+                        if (this.queue.Count > 0)
+                        {
+                            this.currentTask = this.queue.Dequeue();
+                            if (this.currentTask.IsCanceled)
+                            {
+                                return CanceledTask;
+                            }
+                            if (this.currentTask.IsFaulted)
+                            {
+                                var exception = this.currentTask.Exception.InnerExceptions.Count == 1
+                                    ? this.currentTask.Exception.InnerException
+                                    : this.currentTask.Exception;
+                                return Task.FromException<bool>(exception);
+                            }
+                            return TrueTask;
+                        }
+                        
+                        this.currentTask = null; // helps catch errors
+
+                        // case 2: nothing queued up but there are still tasks pending
+                        if (this.pendingCount > 0)
+                        {
+                            this.moveNextTaskBuilder = new TaskCompletionSource<bool>();
+                            return this.moveNextTaskBuilder.Task;
+                        }
+
+                        // case 3: we're done
+                        return FalseTask;
+                    }
+                }
+
+                private void Initialize()
+                {
+                    var queue = new Queue<Task<T>>();
+                    lock (queue) // because tasks can start completing as we're processing
+                    {
+                        foreach (var task in this.source)
+                        {
+                            if (task == null) { throw new ArgumentNullException(nameof(source), $"the {nameof(source)} argument passed to {nameof(OrderByCompletion)} must not contain any null tasks"); }
+
+                            if (task.IsCompleted)
+                            {
+                                queue.Enqueue(task);
+                            }
+                            else
+                            {
+                                ++this.pendingCount;
+                                task.ContinueWith(PlaceCompletedTaskInQueue, state: this, continuationOptions: TaskContinuationOptions.ExecuteSynchronously);
+                            }
+                        }
+                    }
+
+                    this.source = null;
+                }
+
+                private static void PlaceCompletedTaskInQueue(Task<T> task, object state)
+                {
+                    var enumerator = (Enumerator)state;
+                    lock (enumerator.queue)
+                    {
+                        --enumerator.pendingCount;
+
+                        // in the case that the completion of this task is what causes an outstanding MoveNextAsync
+                        // task to finish, we have to complete that task
+                        if (enumerator.queue.Count == 0 && enumerator.moveNextTaskBuilder?.Task.IsCompleted == false)
+                        {
+                            enumerator.currentTask = task;
+                            if (task.IsCanceled)
+                            {
+                                enumerator.moveNextTaskBuilder.SetCanceled();
+                            }
+                            else if (task.IsFaulted)
+                            {
+                                var exception = task.Exception.InnerExceptions.Count == 1
+                                    ? task.Exception.InnerException
+                                    : task.Exception;
+                                enumerator.moveNextTaskBuilder.SetException(exception);
+                            }
+                            else
+                            {
+                                enumerator.moveNextTaskBuilder.SetResult(true);
+                            }
+                        }
+                        else
+                        {
+                            enumerator.queue.Enqueue(task);
+                        }
+                    }
+                }
+            }
+        }
+
         public static Task ForEachAsync<T>(this IAsyncEnumerable<T> source, Action<T> action)
         {
             if (source == null) { throw new ArgumentNullException(nameof(source)); }

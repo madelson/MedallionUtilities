@@ -144,6 +144,33 @@ namespace Medallion.Reflection
             if (method == null) { throw new ArgumentNullException(nameof(method)); }
 
             var parameters = method.GetParameters();
+            if (parameters.Length < 16
+                && !parameters.Any(p => p.ParameterType.IsByRef))
+            {
+                var isAction = method.ReturnType == typeof(void);
+                var typeName = isAction
+                    ? parameters.Length == 0
+                        ? "System.Action"
+                        : "System.Action`" + parameters.Length
+                    : "System.Func`" + (parameters.Length + 1);
+                var genericTypeDefinition = typeof(Action).Assembly.GetType(typeName, throwOnError: true);
+                if (!genericTypeDefinition.IsGenericTypeDefinition)
+                {
+                    return genericTypeDefinition; // only true for Action
+                }
+
+                var genericTypeArguments = new Type[parameters.Length + (isAction ? 1 : 0)];
+                for (var i = 0; i < parameters.Length; ++i)
+                {
+                    genericTypeArguments[i] = parameters[i].ParameterType;
+                }
+                if (!isAction)
+                {
+                    genericTypeArguments[genericTypeArguments.Length - 1] = method.ReturnType;
+                }
+                return genericTypeDefinition.MakeGenericType(genericTypeArguments);
+            }
+
             var parameterExpressions = new ParameterExpression[parameters.Length];
             for (var i = 0; i < parameters.Length; ++i)
             {

@@ -1,0 +1,2 @@
+﻿* Collections optimized for being lightweight but still being good when grown
+* E. g. dictionary has buckets for making remove() fast but most of the time remove() doesn't happen. Let's avoid that bookeeping until we need it!
