@@ -83,6 +83,8 @@
     <Compile Include="AsyncLinq\AsyncEnumerable.cs" />
     <Compile Include="AsyncLinq\AsyncIteratorBuilder.cs" />
     <Compile Include="AsyncLinq\AsyncIteratorBuilderOld.cs" />
+    <Compile Include="BalancingTokenParse\LeftRecursionRewriter.cs" />
+    <Compile Include="BalancingTokenParse\Tests\LeftRecursionRewriterTest.cs" />
     <Compile Include="BalancingTokenParse\Tests\ParserGeneratorTest.cs" />
     <Compile Include="BalancingTokenParse\Tests\TreeListener.cs" />
     <Compile Include="BalancingTokenParse\FirstFollowCalculator.cs" />

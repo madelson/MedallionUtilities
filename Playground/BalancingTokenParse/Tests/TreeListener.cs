@@ -3,16 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Medallion.BalancingTokenParse;
-using Playground.BalancingTokenParse;
 
-namespace Medallion.BalancingTokenParse.Tests
+namespace Playground.BalancingTokenParse.Tests
 {
     class TreeListener : IParserListener
     {
-        private Stack<IParseTreeNode> nodes = new Stack<IParseTreeNode>();
+        private readonly Stack<IParseTreeNode> nodes = new Stack<IParseTreeNode>();
+        private readonly IReadOnlyDictionary<Rule, Rule> ruleMapping;
 
         public IParseTreeNode Root => this.nodes.Single();
+
+        public TreeListener(IReadOnlyDictionary<Rule, Rule> ruleMapping = null)
+        {
+            this.ruleMapping = ruleMapping;
+        }
 
         public void OnSymbolParsed(Symbol symbol, Rule rule)
         {
@@ -22,13 +26,29 @@ namespace Medallion.BalancingTokenParse.Tests
             }
             else
             {
-                var children = new IParseTreeNode[rule.Symbols.Count];
-                for (var i = rule.Symbols.Count - 1; i >= 0; --i)
+                if (this.ruleMapping != null)
                 {
-                    children[i] = this.nodes.Pop();
+                    var mappedRule = this.ruleMapping[rule];
+                    if (mappedRule != null)
+                    {
+                        this.OnRuleParsed(mappedRule);
+                    }
                 }
-                this.nodes.Push(new Node { NonTerminal = (NonTerminal)symbol, Children = children });
+                else
+                {
+                    this.OnRuleParsed(rule);
+                }
             }
+        }
+
+        private void OnRuleParsed(Rule rule)
+        {
+            var children = new IParseTreeNode[rule.Symbols.Count];
+            for (var i = rule.Symbols.Count - 1; i >= 0; --i)
+            {
+                children[i] = this.nodes.Pop();
+            }
+            this.nodes.Push(new Node { NonTerminal = (NonTerminal)rule.Produced, Children = children });
         }
 
         private class LeafNode : IParseTreeNode
@@ -36,7 +56,7 @@ namespace Medallion.BalancingTokenParse.Tests
             public Token Token { get; set; }
 
             public Symbol Symbol => this.Token;
-            public IReadOnlyList<IParseTreeNode> Children => Collections.Empty.Array<IParseTreeNode>();
+            public IReadOnlyList<IParseTreeNode> Children => Medallion.Collections.Empty.Array<IParseTreeNode>();
 
             public IParseTreeNode Flatten() => this;
 

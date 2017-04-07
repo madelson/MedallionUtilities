@@ -17,6 +17,11 @@ namespace Playground.BalancingTokenParse
         {
             this.Produced = produced;
             this.Symbols = symbols.ToArray();
+
+            if (this.Symbols.Count == 1 && this.Symbols[0] == this.Produced)
+            {
+                throw new ArgumentException("cannot be of the form S -> S", nameof(symbols));
+            }
         }
 
         public NonTerminal Produced { get; }

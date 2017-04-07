@@ -18,13 +18,11 @@ namespace Playground.BalancingTokenParse
     {
         public static bool IsNullable(this IFirstFollowProvider provider, Symbol symbol)
         {
-            return symbol is NonTerminal && provider.FirstOf(symbol).Contains(null);
+            return symbol is NonTerminal && provider.FirstOf(symbol).ContainsDefault();
         }
 
         public static IImmutableSet<Token> FirstOf(this IFirstFollowProvider provider, IEnumerable<Symbol> symbols)
         {
-            // BUG: this will add null even if that null should later be removed by a non-null
-
             var builder = ImmutableHashSet.CreateBuilder<Token>();
             foreach (var symbol in symbols)
             {

@@ -1,4 +1,5 @@
-﻿using Playground.BalancingTokenParse;
+﻿using Medallion;
+using Playground.BalancingTokenParse;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,7 +8,7 @@ using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Medallion.BalancingTokenParse.Tests
+namespace Playground.BalancingTokenParse.Tests
 {
     public class ParserGeneratorTest
     {
