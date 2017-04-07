@@ -14,7 +14,9 @@ namespace Playground.BalancingTokenParse.Tests
     {
         private static readonly Token ID = new Token("ID"),
             PLUS = new Token("+"),
-            TIMES = new Token("*");
+            TIMES = new Token("*"),
+            QUESTION_MARK = new Token("?"),
+            COLON = new Token(":");
 
         private static readonly NonTerminal Start = new NonTerminal("Start"),
             Exp = new NonTerminal("Exp");
@@ -49,6 +51,29 @@ namespace Playground.BalancingTokenParse.Tests
             this.output.WriteLine(ToGroupedTokenString(listener.Root));
             ToGroupedTokenString(listener.Root)
                 .ShouldEqual("(((ID * ID) * ID) + ID) + (ID * ID)");
+        }
+        
+        [Fact]
+        public void TestTernaryRewrite()
+        {
+            var rules = new Rule[]
+            {
+                new Rule(Start, Exp),
+                new Rule(Exp, Exp, QUESTION_MARK, Exp, COLON, Exp),
+                new Rule(Exp, ID)
+            };
+
+            var rewritten = LeftRecursionRewriter.Rewrite(rules, rightAssociativeRules: ImmutableHashSet.Create(rules[1]));
+            this.output.WriteLine(ToString(rewritten));
+
+            var nodes = ParserBuilder.CreateParser(rewritten.Keys);
+            var listener = new TreeListener(rewritten);
+            var parser = new ParserNodeParser(nodes, Start);
+
+            parser.Parse(new[] { ID, QUESTION_MARK, ID, QUESTION_MARK, ID, COLON, ID, COLON, ID, QUESTION_MARK, ID, COLON, ID }, listener);
+            this.output.WriteLine(ToGroupedTokenString(listener.Root));
+            ToGroupedTokenString(listener.Root)
+                .ShouldEqual("ID ? (ID ? ID : ID) : (ID ? ID : ID)");
         }
 
         private static string ToString(IReadOnlyDictionary<Rule, Rule> ruleMapping)
