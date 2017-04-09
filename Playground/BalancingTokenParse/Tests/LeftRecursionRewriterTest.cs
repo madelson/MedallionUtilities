@@ -14,9 +14,11 @@ namespace Playground.BalancingTokenParse.Tests
     {
         private static readonly Token ID = new Token("ID"),
             PLUS = new Token("+"),
+            MINUS = new Token("-"),
             TIMES = new Token("*"),
             QUESTION_MARK = new Token("?"),
-            COLON = new Token(":");
+            COLON = new Token(":"),
+            AWAIT = new Token("await");
 
         private static readonly NonTerminal Start = new NonTerminal("Start"),
             Exp = new NonTerminal("Exp");
@@ -74,6 +76,31 @@ namespace Playground.BalancingTokenParse.Tests
             this.output.WriteLine(ToGroupedTokenString(listener.Root));
             ToGroupedTokenString(listener.Root)
                 .ShouldEqual("ID ? (ID ? ID : ID) : (ID ? ID : ID)");
+        }
+
+        [Fact]
+        public void TestUnaryRewrite()
+        {
+            var rules = new Rule[]
+            {
+                new Rule(Start, Exp),
+                new Rule(Exp, MINUS, Exp),
+                new Rule(Exp, Exp, MINUS, Exp),
+                new Rule(Exp, AWAIT, Exp), // making this lower-priority than e - e, although in C# it isn't
+                new Rule(Exp, ID)
+            };
+
+            var rewritten = LeftRecursionRewriter.Rewrite(rules, rightAssociativeRules: ImmutableHashSet.Create(rules[1]));
+            this.output.WriteLine(ToString(rewritten));
+
+            var nodes = ParserBuilder.CreateParser(rewritten.Keys);
+            var listener = new TreeListener(rewritten);
+            var parser = new ParserNodeParser(nodes, Start);
+
+            parser.Parse(new[] { AWAIT, ID, MINUS, MINUS, ID }, listener);
+            this.output.WriteLine(ToGroupedTokenString(listener.Root));
+            ToGroupedTokenString(listener.Root)
+                .ShouldEqual("await (ID - (- ID))");
         }
 
         private static string ToString(IReadOnlyDictionary<Rule, Rule> ruleMapping)

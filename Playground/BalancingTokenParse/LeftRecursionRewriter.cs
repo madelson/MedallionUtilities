@@ -126,7 +126,9 @@ namespace Playground.BalancingTokenParse
                         // this check is simpler than the requirement stated above, because we leverage the fact that we know the current
                         // rule is the highest-precedence left-recursive rule for the symbol
                         (r, index) => index < leftRecursiveRuleIndex || (!IsSimpleLeftRecursive(r) && !IsSimpleRightRecursive(r))
-                            ? new RuleReplacement(r, new Rule(newSymbol, r.Symbols))
+                            // note that right-recursive rules have their last symbol replaced by the new symbol as well. This is to indicate the fact
+                            // that E => -E can't parse as -(1 + 1) because unary minus binds tighter
+                            ? new RuleReplacement(r, new Rule(newSymbol, r.Symbols.Select((s, i) => i == r.Symbols.Count - 1 && s == leftRecursiveRule.Produced ? newSymbol : s)))
                             : null
                     )
                     .Where(t => t != null)
@@ -154,20 +156,20 @@ namespace Playground.BalancingTokenParse
                 // E = E + E
                 // E = T List<+T>
                 // every parse of "+ T" maps to E + E rule
-                var suffixSymbol = new NonTerminal($"'{string.Join(" ", leftRecursiveRule.Symbols.Skip(1))}'");
+                var suffixSymbol = new NonTerminal($"'{string.Join(" ", leftRecursiveRule.Symbols.Skip(1).Take(leftRecursiveRule.Symbols.Count - 2).Append(newSymbol))}'");
                 var suffixListSymbol = new NonTerminal($"List<{suffixSymbol}>");
 
                 replacements.AddRange(
                     new[] 
                     {
-                        // E = T List<+E>
+                        // E = T List<+T>
                         new RuleReplacement(null, new Rule(leftRecursiveRule.Produced, newSymbol, suffixListSymbol)),
 
-                        // List<+E> = +E List<+E> | empty
+                        // List<+T> = +T List<+T> | empty
                         new RuleReplacement(null, new Rule(suffixListSymbol, suffixSymbol, suffixListSymbol)),
                         new RuleReplacement(null, new Rule(suffixListSymbol)),
 
-                        // +E = + T
+                        // +T = + T
                         new RuleReplacement(leftRecursiveRule, new Rule(suffixSymbol, leftRecursiveRule.Symbols.Select((s, i) => i == leftRecursiveRule.Symbols.Count - 1 ? newSymbol : s).Skip(1)))
                     }
                 );
