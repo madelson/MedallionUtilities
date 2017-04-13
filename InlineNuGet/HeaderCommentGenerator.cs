@@ -14,8 +14,9 @@ namespace Medallion.Tools
         public static SyntaxNode AddHeaderComment(SyntaxNode document, string nuspec)
         {
             var parsedNuspec = XDocument.Load(nuspec);
-            var packageName = parsedNuspec.Descendants("id").Single().Value;
-            var packageVersion = parsedNuspec.Descendants("version").Single().Value;
+            var ns = parsedNuspec.Root.Name.Namespace;
+            var packageName = parsedNuspec.Descendants(ns + "id").Single().Value;
+            var packageVersion = parsedNuspec.Descendants(ns + "version").Single().Value;
 
             var sb = new StringBuilder();
             var outerLine = new string('/', 80);

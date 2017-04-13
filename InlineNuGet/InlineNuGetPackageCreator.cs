@@ -22,7 +22,18 @@ namespace Medallion.Tools
 
         private InlineNuGetPackageCreator(string projectFilePath, string nuspecPath, string outputDirectory)
         {
-            this.project = MSBuildWorkspace.Create().OpenProjectAsync(projectFilePath).Result;
+            var project = MSBuildWorkspace.Create().OpenProjectAsync(projectFilePath).Result;
+            // workaround for http://stackoverflow.com/questions/43368253/msbuildworkspace-not-picking-up-any-documents-from-vs2017-project
+            if (!project.Documents.Any())
+            {
+                foreach (var sourceFile in Directory.GetFiles(Path.GetDirectoryName(projectFilePath), "*.cs", SearchOption.AllDirectories)
+                    .Where(f => f.IndexOf(@"\bin\", StringComparison.OrdinalIgnoreCase) < 0 && f.IndexOf(@"\obj\", StringComparison.OrdinalIgnoreCase) < 0))
+                {
+                    project = project.AddDocument(Path.GetFileName(sourceFile), SyntaxFactory.ParseCompilationUnit(File.ReadAllText(sourceFile)), filePath: sourceFile).Project;
+                }
+            }
+            this.project = project;
+
             this.nuspec = nuspecPath;
             this.outputDirectory = outputDirectory;
             this.tempWorkspace = new DirectoryInfo(Path.Combine(Path.GetTempPath(), "InlineNuGet_" + Guid.NewGuid()));

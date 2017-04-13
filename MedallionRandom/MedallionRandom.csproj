@@ -1,22 +1,41 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard1.6;net452</TargetFrameworks>
+    <TargetFrameworks>netstandard1.3;net452</TargetFrameworks>
   </PropertyGroup>
 
   <PropertyGroup>
     <RootNamespace>Medallion</RootNamespace>
+    <Version>1.1.0</Version>
+    <Authors>Michael Adelson</Authors>
+    <Description>A lightweight library of common utilities for working with random numbers</Description>
+    <Copyright>Copyright © 2017</Copyright>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageLicenseUrl>https://raw.githubusercontent.com/madelson/MedallionUtilities/master/License.txt</PackageLicenseUrl>
+    <PackageTags>random rng utility gaussian distribution shuffle</PackageTags>
+    <PackageProjectUrl>https://github.com/madelson/MedallionUtilities/tree/master/MedallionRandom</PackageProjectUrl>
+    <RepositoryUrl />
+    <FileVersion>1.0.0.0</FileVersion>
+    <PackageReleaseNotes>Added .NET Core support via .NET standard</PackageReleaseNotes>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DocumentationFile>bin\Debug\MedallionRandom.XML</DocumentationFile>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+    <TreatSpecificWarningsAsErrors />
+    <WarningLevel>0</WarningLevel>
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <Optimize>True</Optimize>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net452'">
     
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard1.6'">    
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard1.3'">    
     <PackageReference Include="System.Threading.Thread" Version="4.3.0" />
   </ItemGroup>
 

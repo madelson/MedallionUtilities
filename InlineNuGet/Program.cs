@@ -15,21 +15,17 @@ namespace Medallion.Tools
             {
                 Console.WriteLine("Creating inline NuGet package...");
 
-                var nuspec = args.Length == 0
-                    ? Directory.GetFiles(Environment.CurrentDirectory, "*.nuspec").FirstOrDefault()
-                    : args[0];
-
-                if (nuspec == null)
+                using (var nuspecFinder = new NuspecFinder(args.Length > 0 ? args[0] : null))
                 {
-                    throw new FileNotFoundException("No nuspec file found");
+                    var nuspec = nuspecFinder.NuspecPath;
+                    Console.WriteLine($"Using nuspec {nuspec}");
+
+                    var projectFile = Directory.GetFiles(Path.GetDirectoryName(nuspec), "*.*proj").Single();
+                    Console.WriteLine($"Using project file {projectFile}");
+
+                    var packed = InlineNuGetPackageCreator.Create(projectFilePath: projectFile, nuspec: nuspec, outputDirectory: Environment.CurrentDirectory);
+                    Console.WriteLine($"Created {packed}");
                 }
-                Console.WriteLine($"Using nuspec {nuspec}");
-
-                var projectFile = Directory.GetFiles(Path.GetDirectoryName(nuspec), "*.*proj").Single();
-                Console.WriteLine($"Using project file {projectFile}");
-
-                var packed = InlineNuGetPackageCreator.Create(projectFilePath: projectFile, nuspec: nuspec, outputDirectory: Environment.CurrentDirectory);
-                Console.WriteLine($"Created {packed}");
             }
             catch (Exception ex)
             {
