@@ -19,44 +19,45 @@ namespace Medallion.Tools
             var substituted = ReplaceTokens(nuspecText, project);
             
             var parsed = XDocument.Parse(substituted);
+            var ns = parsed.Root.Name.Namespace;
 
             // update id
-            var idElement = parsed.Descendants("id").Single();
+            var idElement = parsed.Descendants(ns + "id").Single();
             idElement.SetValue(idElement.Value + ".Inline");
 
             // update dev dependency
             XElement developmentDependencyElement;
-            var existingDevelopmentDependencyElement = parsed.Descendants("developmentDependency").SingleOrDefault();
+            var existingDevelopmentDependencyElement = parsed.Descendants(ns + "developmentDependency").SingleOrDefault();
             if (existingDevelopmentDependencyElement != null)
             {
                 developmentDependencyElement = existingDevelopmentDependencyElement;
             }
             else
             {
-                developmentDependencyElement = new XElement("developmentDependency");
-                parsed.Descendants("metadata").Single().Add(developmentDependencyElement);
+                developmentDependencyElement = new XElement(ns + "developmentDependency");
+                parsed.Descendants(ns + "metadata").Single().Add(developmentDependencyElement);
             }
             developmentDependencyElement.SetValue("true");
 
             // update files
             XElement filesElement;
-            var existingFilesElement = parsed.Element("package").Element("files");
+            var existingFilesElement = parsed.Element(ns + "package").Element(ns + "files");
             if (existingFilesElement != null)
             {
-                var docXmlElement = existingFilesElement.Elements("file")
-                    .FirstOrDefault(f => StringComparer.OrdinalIgnoreCase.Equals(Path.GetFileName(f.Attribute("src").Value), Path.GetFileNameWithoutExtension(project.FilePath) + ".xml"));
+                var docXmlElement = existingFilesElement.Elements(ns + "file")
+                    .FirstOrDefault(f => StringComparer.OrdinalIgnoreCase.Equals(Path.GetFileName(f.Attribute(ns + "src").Value), Path.GetFileNameWithoutExtension(project.FilePath) + ".xml"));
                 if (docXmlElement != null)
                 {
                     docXmlElement.Remove();
-                    Console.WriteLine($"Removed reference to {docXmlElement.Attribute("src").Value}");
+                    Console.WriteLine($"Removed reference to {docXmlElement.Attribute(ns + "src").Value}");
                 }
 
                 filesElement = existingFilesElement;
             }
             else
             {
-                filesElement = new XElement("files");
-                parsed.Element("package").Add(filesElement);
+                filesElement = new XElement(ns + "files");
+                parsed.Element(ns + "package").Add(filesElement);
             }
 
             var codeFileElement = XElement.Parse($"<file src=\"{WebUtility.HtmlEncode(Path.GetFileName(codeFileName))}\" target=\"content\" />");
@@ -70,10 +71,10 @@ namespace Medallion.Tools
         {
             var compilation = project.GetCompilationAsync().Result;
 
-            var result = nuspecText.Replace("$id$", WebUtility.HtmlEncode(compilation.Assembly.Name))
-                .Replace(
+            var result = nuspecText.LazyReplace("$id$", () => WebUtility.HtmlEncode(compilation.Assembly.Name))
+                .LazyReplace(
                     "$version$", 
-                    WebUtility.HtmlEncode(
+                    () => WebUtility.HtmlEncode(
                         (string)(
                             FindAssemblyAttribute(compilation, typeof(AssemblyInformationalVersionAttribute))
                             ?? FindAssemblyAttribute(compilation, typeof(AssemblyVersionAttribute))
@@ -82,17 +83,27 @@ namespace Medallion.Tools
                         .Single().Value
                     )
                 )
-                .Replace("$author$", WebUtility.HtmlEncode((string)FindAssemblyAttribute(compilation, typeof(AssemblyCompanyAttribute)).ConstructorArguments.Single().Value))
-                .Replace("$description$", WebUtility.HtmlEncode((string)FindAssemblyAttribute(compilation, typeof(AssemblyDescriptionAttribute)).ConstructorArguments.Single().Value));
+                .LazyReplace("$author$", () => WebUtility.HtmlEncode((string)FindAssemblyAttribute(compilation, typeof(AssemblyCompanyAttribute)).ConstructorArguments.Single().Value))
+                .LazyReplace("$description$", () => WebUtility.HtmlEncode((string)FindAssemblyAttribute(compilation, typeof(AssemblyDescriptionAttribute)).ConstructorArguments.Single().Value));
 
             return result;
-        }
+        }  
 
         private static AttributeData FindAssemblyAttribute(Compilation compilation, Type type)
         {
             var result = compilation.Assembly.GetAttributes()
                 .Single(a => a.AttributeClass.ContainingNamespace + "." + a.AttributeClass.Name == type.ToString());
             return result;
+        }
+    }
+
+    internal static class StringHelpers
+    {
+        public static string LazyReplace(this string text, string toReplace, Func<string> replacement)
+        {
+            return text.Contains(toReplace)
+                ? text.Replace(toReplace, replacement())
+                : text;
         }
     }
 }

@@ -18,7 +18,7 @@ namespace Medallion.Tools
                 usings: SyntaxFactory.List(MergeAndSortUsings(documentSyntaxes.SelectMany(n => n.Usings))),
                 attributeLists: SyntaxFactory.List(documentSyntaxes.SelectMany(n => n.AttributeLists)),
                 members: SyntaxFactory.List(documentSyntaxes.SelectMany(n => n.Members).ToArray()),
-                endOfFileToken: documentSyntaxes.First().EndOfFileToken
+                endOfFileToken: SyntaxFactory.Token(SyntaxKind.EndOfFileToken)
             );
 
             return merged;
