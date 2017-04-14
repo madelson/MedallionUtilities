@@ -103,6 +103,55 @@ namespace Playground.BalancingTokenParse.Tests
                 .ShouldEqual("await (ID - (- ID))");
         }
 
+        [Fact]
+        public void TestAliases()
+        {
+            var binop = new NonTerminal("Binop");
+            var rules = new[]
+            {
+                new Rule(Start, Exp),
+
+                new Rule(Exp, ID),
+                new Rule(Exp, MINUS, Exp),
+                new Rule(Exp, binop),
+
+                new Rule(binop, Exp, TIMES, Exp),
+                new Rule(binop, Exp, MINUS, Exp),
+            };
+
+            var rewritten = LeftRecursionRewriter.Rewrite(rules, rightAssociativeRules: ImmutableHashSet.Create(rules[1]));
+            this.output.WriteLine(ToString(rewritten));
+
+            var nodes = ParserBuilder.CreateParser(rewritten.Keys);
+            var listener = new TreeListener(rewritten);
+            var parser = new ParserNodeParser(nodes, Start);
+
+            parser.Parse(new[] { ID, TIMES, MINUS, ID, MINUS, ID }, listener);
+            this.output.WriteLine(ToGroupedTokenString(listener.Root));
+            ToGroupedTokenString(listener.Root)
+                .ShouldEqual("(ID * (- ID)) - ID");
+        }
+
+        [Fact]
+        public void TestFindProblematicLeftRecursion()
+        {
+            var nullable = new NonTerminal("N");
+            var nullable2 = new NonTerminal("N2");
+            var rules = new[]
+            {
+                new Rule(Exp, ID),
+                new Rule(Exp, Exp, PLUS, Exp),
+                new Rule(Exp, nullable, Exp),
+                new Rule(nullable, nullable2),
+                new Rule(nullable, MINUS),
+                new Rule(nullable2, TIMES),
+                new Rule(nullable2),
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => LeftRecursionRewriter.Rewrite(rules, ImmutableHashSet<Rule>.Empty));
+            ex.Message.ShouldEqual("Found Hidden left recursion for Exp: Exp -> N Exp");
+        }
+
         private static string ToString(IReadOnlyDictionary<Rule, Rule> ruleMapping)
         {
             var grouped = ruleMapping.GroupBy(kvp => kvp.Key.Produced)

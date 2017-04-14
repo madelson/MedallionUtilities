@@ -294,7 +294,7 @@ namespace Playground.BalancingTokenParse
                 else
                 {
                     // otherwise, recurse on each rule
-                    var isAlias = this.IsAliasOf(symbol, produced);
+                    var isAlias = this.IsAliasOf(symbol, produced) || this.IsAliasOf(produced, symbol);
                     foreach (var symbolRule in this.rulesByProduced[symbol])
                     {
                         var result = this.CheckForProblematicLeftRecursion(
@@ -353,16 +353,24 @@ namespace Playground.BalancingTokenParse
                         r => new { origRule = r, newRule = new Rule(kvp.Value, r.Symbols), mappedRule = ruleMappingBuilder[r] }
                     )
                     .ToArray();
-
+                
+                // remove all rules which produce the alias
                 rulesByProducedBuilder.Remove(kvp.Key);
 
+                // find the rule that creates the alias
+                var aliasingRuleIndex = aliasOfRulesBuilder.FindIndex(r => r.Symbols.Count == 1 && r.Symbols.Single() == kvp.Key);
+
+                // update the mapping to remove the aliasing rule and remap the alias rules
+                ruleMappingBuilder.Remove(aliasOfRulesBuilder[aliasingRuleIndex]);
                 ruleMappingBuilder.RemoveRange(ruleMapping.Select(m => m.origRule));
                 ruleMappingBuilder.AddRange(ruleMapping.Select(t => new KeyValuePair<Rule, Rule>(t.newRule, t.mappedRule)));
 
-                var aliasingRuleIndex = aliasOfRulesBuilder.FindIndex(r => r.Symbols.Count == 1 && r.Symbols.Single() == kvp.Key);                
+                // replace the aliasing rule with the inlined alias rules in the rules for the aliased symbol
                 aliasOfRulesBuilder.RemoveAt(aliasingRuleIndex);
                 aliasOfRulesBuilder.InsertRange(aliasingRuleIndex, ruleMapping.Select(t => t.newRule));
+                rulesByProducedBuilder[kvp.Value] = aliasOfRulesBuilder.ToImmutable();
 
+                // update the right associative mapping if needed
                 var rightAssociativeRuleMapping = ruleMapping.Where(t => rightAssociativeRulesBuilder.Contains(t.origRule))
                     .ToArray();
                 rightAssociativeRulesBuilder.ExceptWith(rightAssociativeRuleMapping.Select(t => t.origRule));
