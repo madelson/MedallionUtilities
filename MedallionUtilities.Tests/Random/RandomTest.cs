@@ -151,11 +151,27 @@ namespace Medallion
             Assert.Throws<ArgumentNullException>(() => Rand.NextInt32(null));
 
             var random = this.GetRandom();
-            var average = Enumerable.Range(0, 30000).Select(_ => Math.Sign(random.NextInt32()))
-                .Average();
-            var expected = ((long)int.MaxValue - (long)int.MinValue) / 2;
-            var error = Math.Abs(average - expected) / (double)expected;
-            Assert.True(Math.Abs(average) < 0.01, $"was {average}");
+
+            const int Trials = 60000;
+            var bitCounts = new int[8 * sizeof(int)];
+            for (var i = 0; i < Trials; ++i)
+            {
+                var value = unchecked((uint)random.NextInt32());
+                for (var j = 0; j < bitCounts.Length; ++j)
+                {
+                    if (((value >> j) & 1) == 1)
+                    {
+                        ++bitCounts[j];
+                    }
+                }
+            }
+
+            var results = bitCounts.Select(c => c / (double)Trials)
+                .Select((f, i) => new { bit = i, frequency = f, error = Math.Abs(f - 0.5) });
+            foreach (var result in results)
+            {
+                Assert.True(Math.Abs(result.error) < 0.01, $"bit {result.bit}: had frequency {result.frequency} (error = {result.error})");
+            }
         }
 
         [Fact]
@@ -228,7 +244,7 @@ namespace Medallion
                 .OrderBy(i => i)
                 .SequenceShouldEqual(Enumerable.Range(0, 100));
 
-            var shuffled = Enumerable.Range(0, 2000)
+            var shuffled = Enumerable.Range(0, 5000)
                 .Shuffled(this.GetRandom())
                 .ToArray();
             var correlation = RandTest.Correlation(shuffled.Select(Convert.ToDouble).ToArray(), Enumerable.Range(0, shuffled.Length).Select(Convert.ToDouble).ToArray());

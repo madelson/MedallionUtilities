@@ -20,35 +20,35 @@ namespace Playground.Sorting
             this.output = output;
         }
 
-        [Fact]
-        public void StringSortTest()
-        {
-            var strings = Enumerable.Range(0, 10000).Select(_ => Guid.NewGuid().ToString())
-                .ToArray();
-            string[] stringsClone = null;
+        //[Fact]
+        //public void StringSortTest()
+        //{
+        //    var strings = Enumerable.Range(0, 10000).Select(_ => Guid.NewGuid().ToString())
+        //        .ToArray();
+        //    string[] stringsClone = null;
 
-            var a = PerformanceTester.Run(
-                () => InsertionSort.Sort<string>(stringsClone, 0, stringsClone.Length - 1, StringComparer.Ordinal),
-                () => stringsClone = (string[])strings.Clone(),
-                TimeSpan.FromSeconds(5)
-            );
+        //    var a = PerformanceTester.Run(
+        //        () => InsertionSort.Sort<string>(stringsClone, 0, stringsClone.Length - 1, StringComparer.Ordinal),
+        //        () => stringsClone = (string[])strings.Clone(),
+        //        TimeSpan.FromSeconds(5)
+        //    );
 
-            var b = PerformanceTester.Run(
-                () => InsertionSort.Sort(stringsClone, 0, stringsClone.Length - 1, new StructStringComparer()),
-                () => stringsClone = (string[])strings.Clone(),
-                TimeSpan.FromSeconds(5)
-            );
+        //    var b = PerformanceTester.Run(
+        //        () => InsertionSort.Sort(stringsClone, 0, stringsClone.Length - 1, new StructStringComparer()),
+        //        () => stringsClone = (string[])strings.Clone(),
+        //        TimeSpan.FromSeconds(5)
+        //    );
 
-            var c = PerformanceTester.Run(
-                () => InsertionSort.Sort<string>(stringsClone, 0, stringsClone.Length - 1, new StructStringComparer()),
-                () => stringsClone = (string[])strings.Clone(),
-                TimeSpan.FromSeconds(5)
-            );
+        //    var c = PerformanceTester.Run(
+        //        () => InsertionSort.Sort<string>(stringsClone, 0, stringsClone.Length - 1, new StructStringComparer()),
+        //        () => stringsClone = (string[])strings.Clone(),
+        //        TimeSpan.FromSeconds(5)
+        //    );
 
-            this.output.WriteLine(a);
-            this.output.WriteLine(b);
-            this.output.WriteLine(c);
-        }
+        //    this.output.WriteLine(a);
+        //    this.output.WriteLine(b);
+        //    this.output.WriteLine(c);
+        //}
 
         private struct StructStringComparer : IComparer<string>
         {
