@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 
 namespace Playground.BalancingTokenParse
 {
+    // NAME IDEA: Forelle (type of pear). Icon can be a pear. Named because it's LL(LL) (4 L's)!
+
     internal class ParserBuilder
     {
         private readonly IReadOnlyDictionary<IReadOnlyList<Symbol>, Rule> ambiguityResolutions;

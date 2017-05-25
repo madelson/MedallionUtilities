@@ -11,6 +11,7 @@ namespace Playground.BalancingTokenParse
         private readonly IReadOnlyDictionary<NonTerminal, IParserNode> nodes;
         private readonly NonTerminal startSymbol;
         private readonly Action<string> debugWriter;
+        private readonly Dictionary<string, Stack<bool>> stateVariables = new Dictionary<string, Stack<bool>>();
 
         private int index, lookaheadIndex;
         private IReadOnlyList<Token> tokens;
@@ -24,6 +25,7 @@ namespace Playground.BalancingTokenParse
             this.nodes = nodes;
             this.startSymbol = startSymbol;
             this.debugWriter = debugWriter ?? (s => { });
+            this.stateVariables.Clear();
         }
 
         public void Parse(IReadOnlyList<Token> tokens, IParserListener listener)
@@ -59,11 +61,55 @@ namespace Playground.BalancingTokenParse
                     return this.Parse(((ParseSymbolNode)node).Symbol);
                 case ParserNodeKind.ParseRule:
                     var rule = ((ParseRuleNode)node).Rule;
+
+                    if (rule.Rule.RequiredParserVariable != null
+                        && (
+                            !this.stateVariables.TryGetValue(rule.Rule.RequiredParserVariable, out var values)
+                            || values.Count == 0
+                            || !values.Peek()
+                        ))
+                    {
+                        throw new InvalidOperationException($"Cannot parse {rule.Rule} without variable {rule.Rule.RequiredParserVariable}");
+                    }
+
                     foreach (var symbol in rule.Symbols)
                     {
                         if (symbol is Token) { this.Eat((Token)symbol); }
                         else { this.Parse((NonTerminal)symbol); }
                     }
+
+                    if (rule.Rule.Action != null)
+                    {
+                        switch (rule.Rule.Action.Kind)
+                        {
+                            case RuleActionKind.Pop:
+                                if (!this.stateVariables.TryGetValue(rule.Rule.Action.Variable, out var toPop) || toPop.Count == 0)
+                                {
+                                    throw new InvalidOperationException($"Rule {rule.Rule} should pop {rule.Rule.Action.Variable} but the stack is empty");
+                                }
+                                toPop.Pop();
+                                break;
+                            case RuleActionKind.Push:
+                                Stack<bool> toPush;
+                                if (!this.stateVariables.TryGetValue(rule.Rule.Action.Variable, out toPush))
+                                {
+                                    this.stateVariables.Add(rule.Rule.Action.Variable, toPush = new Stack<bool>());
+                                }
+                                toPush.Push(false);
+                                break;
+                            case RuleActionKind.Set:
+                                if (!this.stateVariables.TryGetValue(rule.Rule.Action.Variable, out var toSet) || toSet.Count == 0)
+                                {
+                                    throw new InvalidOperationException($"Rule {rule.Rule} should set {rule.Rule.Action.Variable} but the stack is empty");
+                                }
+                                toSet.Pop();
+                                toSet.Push(true);
+                                break;
+                            default:
+                                throw new InvalidOperationException(rule.Rule.Action.Kind.ToString());
+                        }
+                    }
+
                     return rule.Rule;
                 case ParserNodeKind.TokenLookahead:
                     var mapping = ((TokenLookaheadNode)node).Mapping;

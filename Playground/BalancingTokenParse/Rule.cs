@@ -13,10 +13,12 @@ namespace Playground.BalancingTokenParse
         {
         }
 
-        public Rule(NonTerminal produced, IEnumerable<Symbol> symbols)
+        public Rule(NonTerminal produced, IEnumerable<Symbol> symbols, RuleAction action = null, string requiredParserVariable = null)
         {
             this.Produced = produced;
             this.Symbols = symbols.ToArray();
+            this.Action = action;
+            this.RequiredParserVariable = requiredParserVariable;
 
             if (this.Symbols.Count == 1 && this.Symbols[0] == this.Produced)
             {
@@ -27,10 +29,36 @@ namespace Playground.BalancingTokenParse
         public NonTerminal Produced { get; }
         public IReadOnlyList<Symbol> Symbols { get; }
 
-        public override string ToString() => $"{this.Produced} -> {string.Join(" ", this.Symbols)}";
-    }
+        public string RequiredParserVariable { get; }
+        public RuleAction Action { get; }
 
-    // TODO I don't think this has to support prefix rules at all, just suffix rules
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+            sb.Append(this.Produced).Append(" -> ").Append(string.Join(" ", this.Symbols));
+
+            if (this.RequiredParserVariable != null || this.Action != null)
+            {
+                sb.Append(" {");
+
+                if (this.RequiredParserVariable != null)
+                {
+                    sb.Append(" REQUIRE ").Append(this.RequiredParserVariable);
+                }
+                if (this.Action != null)
+                {
+                    sb.Append(' ').Append(this.Action);
+                }
+
+                sb.Append(" }");
+            }
+
+            return sb.ToString();
+        }
+    }    
+
+    // TODO I don't think this has to support prefix rules at all, just suffix rules. We might want to support
+    // common suffix as a parse node in the future; unclear how valuable this is, though (other than reducing tree size)
     class PartialRule
     {
         private IReadOnlyList<Symbol> cachedSymbols;
@@ -98,4 +126,25 @@ namespace Playground.BalancingTokenParse
             return $"{this.Produced} -> {(this.Start > 0 ? "... " : string.Empty)}{string.Join(" ", this.Symbols)}{(this.Start + this.Length < this.Rule.Symbols.Count ? " ... " : string.Empty)}";
         }
     }
+
+    class RuleAction
+    {
+        public RuleAction(string variable, RuleActionKind kind)
+        {
+            this.Variable = variable;
+            this.Kind = kind;
+        }
+
+        public string Variable { get; }
+        public RuleActionKind Kind { get; }
+
+        public override string ToString() => $"{this.Kind} {this.Variable}";
+    }
+
+    enum RuleActionKind
+    {
+        Push,
+        Set,
+        Pop,
+    } 
 }
