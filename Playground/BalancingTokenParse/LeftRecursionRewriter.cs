@@ -136,8 +136,7 @@ namespace Playground.BalancingTokenParse
             
             // associativity is only a binary concept
             var isLeftAssociative = isBinary && !this.rightAssociativeRules.Contains(leftRecursiveRule);
-
-            IReadOnlyDictionary<Rule, Rule> mappedExistingSymbolRules;
+            
             if (!isLeftAssociative)
             {
                 // for E ? E : E, we have E = T | T ? E : E
