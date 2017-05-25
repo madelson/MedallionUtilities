@@ -83,8 +83,7 @@ namespace Playground.AsyncLinq
                         // error state here since nothing is corrupted
                         throw ConcurrentAccessViolation();
                     case State.Error:
-                        ExceptionDispatchInfo.Capture(Unwrap(this.moveNextTaskBuilder.Task.Exception)).Throw();
-                        goto default; // never hit because of Throw()
+                        throw Rethrow(this.moveNextTaskBuilder.Task.Exception);
                     case State.Disposed:
                         // todo this is wrong
                         // this can happen if the iterator is disposed while still running. Just throw
@@ -106,6 +105,7 @@ namespace Playground.AsyncLinq
         {
             using (var enumerator = values.GetEnumerator())
             {
+                // todo ConfigureAwait()
                 while (await enumerator.MoveNextAsync().ConfigureAwait(false))
                 {
                     if (!await this.YieldAsync(enumerator.Current)) { break; }
@@ -134,8 +134,7 @@ namespace Playground.AsyncLinq
                         case State.Completed:
                             throw new InvalidOperationException("The enumeration has already finished");
                         case State.Error:
-                            ExceptionDispatchInfo.Capture(Unwrap(this.moveNextTaskBuilder.Task.Exception)).Throw();
-                            goto default; // never hit since Throw throws
+                            throw Rethrow(this.moveNextTaskBuilder.Task.Exception);
                         case State.Disposed:
                             throw this.Disposed();
                         default:
@@ -252,7 +251,7 @@ namespace Playground.AsyncLinq
                         // We thus store off any exception and transition to the completed state
                         @this.state = State.Completed;
                         @this.yieldedEnumeratorOrCompletionException = task.IsCanceled ? new OperationCanceledException()
-                            : task.IsFaulted ? Unwrap(task.Exception)
+                            : task.IsFaulted ? task.Exception.GetBaseException()
                             : null;
                         break;
                     case State.WaitingForAsyncYieldOrCompletion:
@@ -261,7 +260,7 @@ namespace Playground.AsyncLinq
                         @this.state = State.Completed;
                         // note: setting the builder must go after setting the state in case someone has put a sync continuation on it!
                         if (task.IsCanceled) { @this.moveNextTaskBuilder.SetCanceled(); }
-                        else if (task.IsFaulted) { @this.moveNextTaskBuilder.SetException(Unwrap(task.Exception)); }
+                        else if (task.IsFaulted) { @this.moveNextTaskBuilder.SetException(task.Exception.GetBaseException()); }
                         else { @this.moveNextTaskBuilder.SetResult(false); }
                         break;
                     case State.Error:
@@ -280,13 +279,6 @@ namespace Playground.AsyncLinq
                 }
             }
         };
-
-        private static Exception Unwrap(AggregateException aggregateException)
-        {
-            return aggregateException.InnerExceptions.Count == 1
-                ? aggregateException.InnerException
-                : aggregateException;
-        }
 
         private Task<bool> RunYieldContinuationNoLock()
         {
@@ -455,6 +447,12 @@ namespace Playground.AsyncLinq
         );
 
         private Exception UnexpectedState() => new InvalidOperationException($"Unexpected state '{this.state}'");
+
+        private static Exception Rethrow(AggregateException aggregateException)
+        {
+            ExceptionDispatchInfo.Capture(aggregateException.GetBaseException()).Throw();
+            throw new InvalidOperationException("will never get here");
+        }
         #endregion
 
         #region ---- State ----

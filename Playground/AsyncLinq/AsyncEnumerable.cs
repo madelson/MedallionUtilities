@@ -8,6 +8,11 @@ using System.Threading.Tasks;
 
 namespace Playground.AsyncLinq
 {
+    // todo consider switching heavily to ValueTask<T>
+    // todo supported operations should be all IEnumerable => IAsyncEnumerable (e. g. SelectAsync()) and async functions on top of async (IAsyncEnumerable.Select)
+    //  sync select on IAsync seems superfluous and could be covered via a single method Apply() (maybe... this might make chaining harder at times)
+    //  NOTE: we ALMOST get this for free with ValueTask<T>, but don't because it lacks conversions from T and Task<T>... we could make our own with conversions...
+
     public static class AsyncEnumerable
     {
         private static readonly Task<bool> CachedTrueTask = BooleanTask(true), CachedFalseTask = BooleanTask(false);
@@ -407,7 +412,7 @@ namespace Playground.AsyncLinq
         {
             if (source == null) { throw new ArgumentNullException(nameof(source)); }
             if (selector == null) { throw new ArgumentNullException(nameof(selector)); }
-
+            
             return Create<TResult>(async builder =>
             {
                 using (var enumerator = source.GetEnumerator())
@@ -542,6 +547,9 @@ namespace Playground.AsyncLinq
         }
     }
 
+    // todo ideas here: ConfigureAwait property
+    // CancellationToken property
+    // the enumerator should also have these
     public interface IAsyncEnumerable<out T>
     {
         IAsyncEnumerator<T> GetEnumerator();
