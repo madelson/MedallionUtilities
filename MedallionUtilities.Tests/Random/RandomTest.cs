@@ -204,7 +204,7 @@ namespace Medallion
             Assert.Throws<ArgumentNullException>(() => Rand.NextSingle(null));
 
             var random = this.GetRandom();
-            var average = Enumerable.Range(0, 20000).Select(_ => random.NextSingle())
+            var average = Enumerable.Range(0, 40000).Select(_ => random.NextSingle())
                 .Average();
             Assert.Equal(actual: average, expected: .5f, precision: 2);
         }
