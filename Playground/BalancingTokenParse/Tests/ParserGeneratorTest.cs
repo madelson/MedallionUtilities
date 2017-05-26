@@ -192,8 +192,13 @@ namespace Playground.BalancingTokenParse.Tests
                 new Dictionary<IReadOnlyList<Symbol>, Rule>
                 {
                     {
-                        // note: this is more minimal than ideal; id<id>() is not ambiguous
+                        // id<id>(id could be call(id<id>, id) or compare(id, compare(id, id))
                         new[] { ID, LT, ID, GT, OPEN_PAREN, ID },
+                        rules.Single(r => r.Symbols.SequenceEqual(new Symbol[] { name, OPEN_PAREN, argList, CLOSE_PAREN }))
+                    },
+                    {
+                        // id<id>(( could be call(id<id>, (...)) or compare(id, compare(id, (...)))
+                        new[] { ID, LT, ID, GT, OPEN_PAREN, OPEN_PAREN },
                         rules.Single(r => r.Symbols.SequenceEqual(new Symbol[] { name, OPEN_PAREN, argList, CLOSE_PAREN }))
                     },
                 }
@@ -241,7 +246,7 @@ namespace Playground.BalancingTokenParse.Tests
                 new Dictionary<IReadOnlyList<Symbol>, Rule>
                 {
                     {
-                        new[] { term },
+                        new Symbol[] { term, minus },
                         rules.Single(r => r.Symbols.SequenceEqual(new Symbol[] { term, minus, Exp }))
                     },
                 }

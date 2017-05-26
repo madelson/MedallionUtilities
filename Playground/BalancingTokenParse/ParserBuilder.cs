@@ -600,7 +600,7 @@ namespace Playground.BalancingTokenParse
         public static bool EndsWith<TSource>(this IEnumerable<TSource> items, IEnumerable<TSource> suffix, IEqualityComparer<TSource> comparer = null)
         {
             var itemsList = (items as IReadOnlyList<TSource>) ?? items.ToArray();
-            var suffixList = (items as IReadOnlyList<TSource>) ?? suffix.ToArray();
+            var suffixList = (suffix as IReadOnlyList<TSource>) ?? suffix.ToArray();
 
             return suffixList.Count <= itemsList.Count
                 && itemsList.Skip(itemsList.Count - suffixList.Count).SequenceEqual(suffixList, comparer);
