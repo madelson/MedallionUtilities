@@ -215,7 +215,9 @@ namespace Medallion.Collections
             equals(wrappedA, wrappedB, comparer);
 
             // capture timing stats
-            const int Trials = 100;
+            const int Trials = 1000;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
             var originalThreadPriority = Thread.CurrentThread.Priority;
             try
             {
