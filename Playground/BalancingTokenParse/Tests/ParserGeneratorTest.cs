@@ -260,5 +260,66 @@ namespace Playground.BalancingTokenParse.Tests
             listener.Root.Flatten().ToString()
                 .ShouldEqual("Start(Exp(Term(Cast((, ID, ), Exp(Term((, Exp(Term((, Exp(Term(ID)), )), -, Exp(Term(ID))), )))))))");
         }
+
+        /// <summary>
+        /// Tests an ambiguity similar to what C# has with await. For example:
+        /// 
+        /// await(foo) could be Call("await", "foo") or Await("foo")
+        /// </summary>
+        [Fact]
+        public void TestAwaitParensAmbiguity()
+        {
+            var call = new NonTerminal("Call");
+            var arguments = new NonTerminal("Arguments");
+            var argumentsTail = new NonTerminal("ArgumentsTail");
+            var identifier = new NonTerminal("Identifier");
+            var await = new Token("await");
+
+            var awaitRule = new Rule(Exp, new Symbol[] { await, Exp });
+            var rules = new[]
+            {
+                new Rule(Start, StmtList),
+                
+                new Rule(StmtList, Stmt, StmtList),
+                new Rule(StmtList),
+
+                new Rule(Stmt, Exp, SEMICOLON),
+
+                new Rule(Exp, identifier),
+                new Rule(Exp, OPEN_PAREN, Exp, CLOSE_PAREN),
+                new Rule(Exp, call),
+                awaitRule,
+
+                new Rule(call, identifier, OPEN_PAREN, arguments, CLOSE_PAREN),
+
+                new Rule(arguments),
+                new Rule(arguments, Exp, argumentsTail),
+                new Rule(argumentsTail),
+                new Rule(argumentsTail, COMMA, Exp, argumentsTail),
+
+                new Rule(identifier, ID),
+                new Rule(identifier, await),
+            };
+
+            var nodes = ParserBuilder.CreateParser(
+                rules,
+                new Dictionary<IReadOnlyList<Symbol>, Rule>
+                {
+                    { new Symbol[] { await, OPEN_PAREN, ID, CLOSE_PAREN }, awaitRule },
+                    { new Symbol[] { await, OPEN_PAREN, OPEN_PAREN, Exp, CLOSE_PAREN, CLOSE_PAREN }, awaitRule },
+                    { new Symbol[] { await, OPEN_PAREN, ID, OPEN_PAREN, arguments, CLOSE_PAREN, CLOSE_PAREN }, awaitRule },
+                    { new Symbol[] { await, OPEN_PAREN, await, CLOSE_PAREN }, awaitRule },
+                    { new Symbol[] { await, OPEN_PAREN, await, Exp, CLOSE_PAREN }, awaitRule },
+                    { new Symbol[] { await, OPEN_PAREN, await, OPEN_PAREN, arguments, CLOSE_PAREN, CLOSE_PAREN }, awaitRule },
+                    { new Symbol[] { await, OPEN_PAREN, await, OPEN_PAREN, Exp, CLOSE_PAREN, CLOSE_PAREN }, awaitRule },
+                }
+            );
+            var parser = new ParserNodeParser(nodes, Start, this.output.WriteLine);
+
+            var listener = new TreeListener();
+            parser.Parse(new[] { await, OPEN_PAREN, ID, CLOSE_PAREN, SEMICOLON, await, OPEN_PAREN, ID, COMMA, ID, CLOSE_PAREN, SEMICOLON }, listener);
+            this.output.WriteLine(listener.Root.Flatten().ToString());
+            listener.Root.Flatten().ToString().ShouldEqual("Start(List<Stmt>(Stmt(Exp(await, Exp((, Exp(Identifier(ID)), ))), ;), Stmt(Exp(Call(Identifier(await), (, Arguments(Exp(Identifier(ID)), ArgumentsTail(,, Exp(Identifier(ID)), ArgumentsTail())), ))), ;)))");
+        }
     }
 }

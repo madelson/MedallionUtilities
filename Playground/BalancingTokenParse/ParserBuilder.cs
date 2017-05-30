@@ -9,6 +9,10 @@ using System.Threading.Tasks;
 namespace Playground.BalancingTokenParse
 {
     // NAME IDEA: Forelle (type of pear). Icon can be a pear. Named because it's LL(LL) (4 L's)!
+    // todo: lookahead with actions is weird. If we don't know what we're seeing, we might find ourselves in an ambiguous state.
+    // The main key is that we probably can't peel off prefix tokens if doing so would leave a partial rule that has an action, although
+    // this could prove too restrictive (e. g. differentiate between public method and public class when method has an action to clear this async variable).
+    // A better option might be to just ignore variables in lookahead, resolving ambiguities arbitrarily
 
     internal class ParserBuilder
     {
@@ -21,6 +25,11 @@ namespace Playground.BalancingTokenParse
         private readonly Dictionary<IReadOnlyCollection<PartialRule>, IParserNode> cache =
             new Dictionary<IReadOnlyCollection<PartialRule>, IParserNode>(EqualityComparers.GetCollectionComparer<PartialRule>());
         private readonly Dictionary<NonTerminal, DiscriminatorContext> discriminatorContexts = new Dictionary<NonTerminal, DiscriminatorContext>();
+        /// <summary>
+        /// Each discriminator rule is introduced to represent a suffix of some pre-existing rule following some token. This preserves
+        /// that mapping of the discriminator symbol rule to the base rule
+        /// </summary>
+        private readonly Dictionary<Rule, Rule> discriminatorRuleMappings = new Dictionary<Rule, Rule>();
 
         private ParserBuilder(
             IEnumerable<Rule> rules,
@@ -208,7 +217,11 @@ namespace Playground.BalancingTokenParse
                     {
                         // create and register the new sub-discriminator
                         var newSubDiscriminator = new NonTerminal(match.discriminator.Name + new string('\'', this.discriminatorSymbols[match.discriminator].Count + 1));
-                        this.rules.Add(newSubDiscriminator, this.rules[match.discriminator].Select(r => new Rule(newSubDiscriminator, r.Symbols)).ToArray());
+                        this.rules.Add(newSubDiscriminator, this.rules[match.discriminator].Select(r => new Rule(newSubDiscriminator, r.Symbols, r.Action, r.RequiredParserVariable)).ToArray());
+                        foreach (var rule in this.rules[newSubDiscriminator])
+                        {
+                            this.discriminatorRuleMappings.Add(rule, this.rules[match.discriminator].Single(r => r.Symbols.SequenceEqual(rule.Symbols)));
+                        }
                         this.firstFollow.Register(this.rules[newSubDiscriminator].ToDictionary(
                             r => r,
                             r => followMapping.Single(kvp => kvp.Key.Symbols.SequenceEqual(r.Symbols)).Value
@@ -309,7 +322,11 @@ namespace Playground.BalancingTokenParse
                 // create the discriminator symbol
                 discriminator = new NonTerminal("T" + this.discriminatorSymbols.Count);
                 this.discriminatorSymbols.Add(discriminator, new List<DiscriminatorPrefixInfo>());
-                var rulesAndFollowSets = suffixToRuleMapping.ToDictionary(kvp => new Rule(discriminator, kvp.Key), kvp => this.firstFollow.FollowOf(kvp.Value.Rule));
+                var rulesAndFollowSets = suffixToRuleMapping.ToDictionary(kvp => new Rule(discriminator, kvp.Key, kvp.Value.Rule.Action, kvp.Value.Rule.RequiredParserVariable), kvp => this.firstFollow.FollowOf(kvp.Value.Rule));
+                foreach (var rule in rulesAndFollowSets.Keys)
+                {
+                    this.discriminatorRuleMappings.Add(rule, suffixToRuleMapping.Single(kvp => kvp.Key.SequenceEqual(rule.Symbols)).Value.Rule);
+                }
                 this.rules.Add(discriminator, rulesAndFollowSets.Keys.ToArray());
                 this.firstFollow.Register(rulesAndFollowSets);
                 this.discriminatorContexts.Add(discriminator, new DiscriminatorContext(outerSymbol: rules.Only(r => r.Produced), prefix: prefix, lookaheadToken: lookaheadToken));
@@ -331,38 +348,70 @@ namespace Playground.BalancingTokenParse
         {
             if (this.ambiguityResolutions.Count == 0) { return null; }
             
-            // TODO: one potential here is that we're not considering lookahead token at all. It's unclear whether we should be
-            // considering lookahead token or something more general. For example, in the case of id<id>(, the token ')' is not ambiguous
-            // but 'id' is
-
+            // gather the context in which we are encountering the ambiguity
             var context = this.GetFullContext(rules.Only(r => r.Produced));
             var contextSymbols = context.Item2.Concat(prefix).Append(lookaheadToken).ToArray();
+            
+            // map each ambiguous rule to it's "base" rule: the base rule is what the user would pass in as the resolution.
+            // Note that this implicitly enforces that multiple ambiguous rules don't map to the same base rule; but that
+            // shouldn't be able to happen because of how we construct discriminators
+            var baseRulesToRules = rules.ToDictionary(r => this.GetBaseRule(r.Rule), r => r);
 
-            // NOTE: unclear whether it's really correct to be looking at suffixes here; exact match only may be sufficient
-            var resolutions = this.ambiguityResolutions.Where(kvp => contextSymbols.EndsWith(kvp.Key))
-                .OrderByDescending(kvp => kvp.Key.Count)
-                .Select(kvp => kvp.Value)
+            // sometimes contexts contains discriminator symbols that the user couldn't specify. When we see a discriminator, we
+            // need to expand it out by inlining each of it's productions. We then end up with multiple context cases; the user MUST
+            // resolve each in the same way
+            var contexts = this.ExpandDiscriminatorsInContext(contextSymbols.ToImmutableList());
+
+            // map each context to matching resolutions
+            var baseRuleResolutions = contexts.Select(c => new { context = c, resolutions = this.ambiguityResolutions.Where(kvp => kvp.Key.SequenceEqual(c) && baseRulesToRules.ContainsKey(kvp.Value)).ToArray() })
                 .ToArray();
 
-            foreach (var resolved in resolutions)
+            // if any context didn't match a resolution, we can't proceed
+            if (baseRuleResolutions.Any(t => t.resolutions.Length == 0))
             {
-                // we need to determine a best match rather than an exact match because we won't actually be thinking about the resolved
-                // rule at this point; we'll be thinking about a discriminator rule instead
-                var matchScores = rules.ToDictionary(
-                    r => r,
-                    r => r.Symbols.Reverse()
-                        .Select((s, index) => new { s, index })
-                        .TakeWhile(t => t.index < resolved.Symbols.Count && resolved.Symbols[resolved.Symbols.Count - 1 - t.index] == t.s)
-                        .Count()
+                // could return null here; I'm throwing for clarity
+                throw new InvalidOperationException(
+                    $"Ambiguity trying to parse {context.Item1} in context: {string.Join(", ", baseRuleResolutions.First(t => t.resolutions.Length == 0).context)}"
                 );
-                if (matchScores.Values.All(s => s == 0)) { break; }
-                if (matchScores.Values.Count(s => s == matchScores.Values.Max()) != 1) { throw new NotSupportedException("Multiple best scores"); }
-                return new ParseRuleNode(matchScores.MaxBy(kvp => kvp.Value).Key);
             }
 
-            if (resolutions.Length > 0) { throw new NotSupportedException("No valid matches"); }
+            // ensure that each resolution resolved the same base rule; return the rule which that base rule mapped to
+            return new ParseRuleNode(baseRulesToRules[baseRuleResolutions.SelectMany(t => t.resolutions).Only(r => r.Value)]);
+        }
 
-            return null;
+        /// <summary>
+        /// Takes in a sequence of context symbols and returns the result of expanding each discriminator symbol in the
+        /// sequence to all productions. For example ID T0 COMMA T1 might expand to ID (A | B) COMMA (C | D) which would
+        /// then be 4 distinct symbol lists when taking the cross product. NonTerminals which are not discriminators are 
+        /// not expanded: NOTE: really any non-recursive synthetic symbol should be expanded!
+        /// </summary>
+        private IReadOnlyList<ImmutableList<Symbol>> ExpandDiscriminatorsInContext(ImmutableList<Symbol> contextSymbols)
+        {
+            var discriminatorIndex = contextSymbols.FindIndex(s => s is NonTerminal d && this.discriminatorContexts.ContainsKey(d));
+            if (discriminatorIndex < 0) { return new[] { contextSymbols }; }
+
+            var prefix = contextSymbols.RemoveRange(index: discriminatorIndex, count: contextSymbols.Count - discriminatorIndex);
+            var discriminatorRules = this.rules[(NonTerminal)contextSymbols[discriminatorIndex]];
+            var suffix = contextSymbols.RemoveRange(index: 0, count: discriminatorIndex + 1);
+
+            var expanded = (
+                    from discriminatorRule in discriminatorRules
+                    from expandedSuffix in this.ExpandDiscriminatorsInContext(suffix)
+                    select prefix.AddRange(discriminatorRule.Symbols).AddRange(suffix)
+                )
+                .ToArray();
+            return expanded;
+        }
+
+        /// <summary>
+        /// Maps a discriminator rule all the way back to the base non-discriminator rule which it helps
+        /// resolve to
+        /// </summary>
+        private Rule GetBaseRule(Rule rule)
+        {
+            return this.discriminatorRuleMappings.TryGetValue(rule, out var mapped)
+                ? this.GetBaseRule(mapped)
+                : rule;
         }
 
         private Dictionary<PartialRule, Rule> MapSymbolRules(NonTerminal discriminator, IReadOnlyCollection<PartialRule> toMap)
@@ -469,8 +518,7 @@ namespace Playground.BalancingTokenParse
 
             var resultSymbol = symbol;
             var resultTokens = new List<Symbol>();
-            DiscriminatorContext context;
-            while (this.discriminatorContexts.TryGetValue(resultSymbol, out context))
+            while (this.discriminatorContexts.TryGetValue(resultSymbol, out var context))
             {
                 resultSymbol = context.OuterSymbol;
                 resultTokens.AddRange(context.Prefix);

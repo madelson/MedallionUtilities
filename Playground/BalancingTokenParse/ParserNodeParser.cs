@@ -62,7 +62,8 @@ namespace Playground.BalancingTokenParse
                 case ParserNodeKind.ParseRule:
                     var rule = ((ParseRuleNode)node).Rule;
 
-                    if (rule.Rule.RequiredParserVariable != null
+                    if (!this.IsInLookahead
+                        && rule.Rule.RequiredParserVariable != null
                         && (
                             !this.stateVariables.TryGetValue(rule.Rule.RequiredParserVariable, out var values)
                             || values.Count == 0
