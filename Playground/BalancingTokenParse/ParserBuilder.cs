@@ -346,6 +346,26 @@ namespace Playground.BalancingTokenParse
 
         private IParserNode TryCreateExplicitAmbiguityResolutionNode(IReadOnlyList<PartialRule> rules, ImmutableList<Symbol> prefix, Token lookaheadToken)
         {
+            // if some but not all rules require a single variable, we will let that be the determining factor.
+            // In the future, we may also want to allow ambiguity resolutions to be keyed on a variable
+            if (rules.Select(r => r.Rule.RequiredParserVariable).Where(v => v != null).Distinct().Count() == 1
+                && !rules.All(r => r.Rule.RequiredParserVariable != null))
+            {
+                var rulesByHasVariable = rules.GroupBy(r => r.Rule.RequiredParserVariable != null)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Count() == 1
+                            ? new ParseRuleNode(g.Single())
+                            // we know already that a this will not be LL(1) since all have the same lookahead
+                            : this.CreateNonLL1ParserNode(lookaheadToken, g.ToArray(), prefix)
+                    );
+                return new VariableSwitchNode(
+                    variableName: rules.Where(r => r.Rule.RequiredParserVariable != null).Only(r => r.Rule.RequiredParserVariable),
+                    trueNode: rulesByHasVariable[true],
+                    falseNode: rulesByHasVariable[false]
+                );
+            }
+
             if (this.ambiguityResolutions.Count == 0) { return null; }
             
             // gather the context in which we are encountering the ambiguity

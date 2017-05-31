@@ -20,6 +20,7 @@ namespace Playground.BalancingTokenParse
         TokenLookahead,
         GrammarLookahead,
         MapResult,
+        VariableSwitch,
     }
 
     internal sealed class ParseSymbolNode : IParserNode
@@ -117,5 +118,22 @@ namespace Playground.BalancingTokenParse
         public ParserNodeKind Kind => ParserNodeKind.MapResult;
 
         public override string ToString() => $"Map {{ {string.Join(", ", this.Mapping.Select(kvp => $"{kvp.Key} => {kvp.Value}"))} }}";
+    }
+
+    internal sealed class VariableSwitchNode : IParserNode
+    {
+        public VariableSwitchNode(string variableName, IParserNode trueNode, IParserNode falseNode)
+        {
+            this.VariableName = variableName;
+            this.TrueNode = trueNode;
+            this.FalseNode = falseNode;
+        }
+
+        public string VariableName { get; }
+        public IParserNode TrueNode { get; }
+        public IParserNode FalseNode { get; }
+        public ParserNodeKind Kind => ParserNodeKind.VariableSwitch;
+
+        public override string ToString() => $"{this.VariableName} ? {this.TrueNode} : {this.FalseNode}";
     }
 }

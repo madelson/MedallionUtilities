@@ -134,6 +134,7 @@ namespace Playground.BalancingTokenParse
                     {
                         this.Eat(lookaheadNode.Token);
                         var ruleUsed = this.Parse(lookaheadNode.Discriminator);
+                        // TODO this potentially should perform any rule actions (e. g. state variables)
                         return lookaheadNode.Mapping[ruleUsed];
                     }
                     else
@@ -147,6 +148,15 @@ namespace Playground.BalancingTokenParse
 
                         return this.Parse(new ParseRuleNode(lookaheadNode.Mapping[ruleUsed]));
                     }
+                case ParserNodeKind.VariableSwitch:
+                    var switchNode = (VariableSwitchNode)node;
+                    if (this.stateVariables.TryGetValue(switchNode.VariableName, out var variableValues)
+                        && variableValues.Count > 0
+                        && variableValues.Peek())
+                    {
+                        return this.Parse(switchNode.TrueNode);
+                    }
+                    return this.Parse(switchNode.FalseNode);
                 default:
                     throw new ArgumentException(node.Kind.ToString());
             }
