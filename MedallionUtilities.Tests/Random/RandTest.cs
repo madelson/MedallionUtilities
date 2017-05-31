@@ -97,7 +97,7 @@ namespace Medallion
         [Fact]
         public void TestShuffled()
         {
-            var shuffled = Enumerable.Range(0, 1000)
+            var shuffled = Enumerable.Range(0, 10000)
                 .Shuffled()
                 .ToArray();
             var correlation = Correlation(shuffled.Select(Convert.ToDouble).ToArray(), Enumerable.Range(0, shuffled.Length).Select(Convert.ToDouble).ToArray());
@@ -107,7 +107,7 @@ namespace Medallion
         [Fact]
         public void TestShuffle()
         {
-            var list = Enumerable.Range(0, 1000).ToList();
+            var list = Enumerable.Range(0, 10000).ToList();
             list.Shuffle();
             var correlation = Correlation(list.Select(Convert.ToDouble).ToArray(), Enumerable.Range(0, list.Count).Select(Convert.ToDouble).ToArray());
             Assert.True(Math.Abs(correlation) < .05, correlation.ToString());
