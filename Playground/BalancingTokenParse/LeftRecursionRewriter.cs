@@ -71,7 +71,7 @@ namespace Playground.BalancingTokenParse
         }
 
         private bool IsAliasOf(Symbol a, NonTerminal b) =>
-            Traverse.Along(a as NonTerminal, s => this.aliases.GetValueOrDefault(s)).Contains(b);
+            a != b && Traverse.Along(a as NonTerminal, s => this.aliases.GetValueOrDefault(s)).Contains(b);
 
         private static NonTerminal GetAliasedSymbol(NonTerminal symbol, IReadOnlyDictionary<NonTerminal, ImmutableList<Rule>> rules)
         {

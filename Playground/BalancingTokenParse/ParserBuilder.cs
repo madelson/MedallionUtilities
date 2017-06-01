@@ -150,7 +150,7 @@ namespace Playground.BalancingTokenParse
                     // used to just check for equality, but this would find T0 as a match for T0'. Now we check for
                     // that as well. This is redundant with the final check but might help for speed
                     .Where(kvp => kvp.Key != produced && kvp.Value.All(i => i.Symbol != produced))
-                    .Select(kvp => new { discriminator = kvp.Key, mapping = this.MapSymbolRules(kvp.Key, rules) })
+                    .Select(kvp => new { discriminator = kvp.Key, mapping = this.MapSymbolRules(kvp.Key, rules, lookaheadToken) })
                     .Where(t => t.mapping != null)
                     // we know all rules coming in have the given token in their next set. Only strip off a prefix where that token
                     // is part of the first set of all mapped rules, since otherwise we'll be unable to parse. In other words, don't
@@ -434,7 +434,7 @@ namespace Playground.BalancingTokenParse
                 : rule;
         }
 
-        private Dictionary<PartialRule, Rule> MapSymbolRules(NonTerminal discriminator, IReadOnlyCollection<PartialRule> toMap)
+        private Dictionary<PartialRule, Rule> MapSymbolRules(NonTerminal discriminator, IReadOnlyCollection<PartialRule> toMap, Token lookaheadToken)
         {
             var result = new Dictionary<PartialRule, Rule>();
             foreach (var rule in this.rules[discriminator])
@@ -451,9 +451,18 @@ namespace Playground.BalancingTokenParse
                 }
             }
 
-            // require that all rules and all partial rules were mapped
+            // all partial rules must be mapped to discriminator rules
             if (result.Count != toMap.Count) { return null; }
-            if (this.rules[discriminator].Except(result.Values).Any()) { return null; }
+
+            // we also require that all discriminator rules are mapped UNLESS they cannot appear in
+            // the lookahead token context. That way, we can't possibly have the discriminator return a result
+            // that is not actually a mapped prefix. This restriction is somewhat questionable, since if we did find
+            // such a result it would simply mean that there will be a parsing error
+            if (this.rules[discriminator].Except(result.Values)
+                .Any(r => this.firstFollow.NextOf(r).Contains(lookaheadToken)))
+            {
+                return null;
+            }
 
             return result;
         }
