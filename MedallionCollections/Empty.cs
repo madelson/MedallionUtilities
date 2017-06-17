@@ -9,7 +9,7 @@ namespace Medallion.Collections
     /// <summary>
     /// Provides access to cached immutable instances of empty collections implementing various
     /// interfaces. The collections provided by this class are optimized empty implementations, and
-    /// do no work when methods are called. Similarly, the can be enumerated without allocation
+    /// do no work when methods are called. Similarly, they can be enumerated without allocation
     /// </summary>
     public static class Empty
     {
