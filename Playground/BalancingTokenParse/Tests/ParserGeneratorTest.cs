@@ -358,5 +358,31 @@ namespace Playground.BalancingTokenParse.Tests
             this.output.WriteLine(listener.Root.Flatten().ToString());
             listener.Root.Flatten().ToString().ShouldEqual("Start(List<Stmt>(Stmt(Exp(await, Exp((, Exp(Identifier(ID)), ))), ;), Stmt(Exp(Call(Identifier(await), (, Arguments(Exp(Identifier(ID)), ArgumentsTail(,, Exp(Identifier(ID)), ArgumentsTail())), ))), ;)))");
         }
+
+        [Fact]
+        public void TestDanglingElseAmbiguity()
+        {
+            var @if = new Token("If");
+            var @else = new Token("Else");
+            var then = new Token("Then");
+
+            var rules = new[]
+            {
+                new Rule(Start, Exp),
+                new Rule(Exp, ID),
+                new Rule(Exp, @if, Exp, then, Exp),
+                new Rule(Exp, @if, Exp, then, Exp, @else, Exp),
+            };
+
+            Assert.Throws<NotSupportedException>(() => ParserBuilder.CreateParser(rules));
+
+            ParserBuilder.CreateParser(
+                rules,
+                new Dictionary<IReadOnlyList<Symbol>, Rule>
+                {
+                    { new Symbol[] { @if, Exp, then, Exp, @else }, rules.Single(r => r.Symbols.Contains(@else)) }
+                }
+            );
+        }
     }
 }
