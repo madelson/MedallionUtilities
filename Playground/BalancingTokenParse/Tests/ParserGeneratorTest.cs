@@ -60,6 +60,43 @@ namespace Playground.BalancingTokenParse.Tests
                 .ShouldEqual("Start(List<Stmt>(Stmt(Exp(ID), ;), Stmt(Exp([, List<Exp>(Exp(ID), Exp([, List<Exp>(Exp(ID), Exp(ID)), ])), ]), ;)))");
         }
 
+        // test case from https://stackoverflow.com/questions/8496065/why-is-this-lr1-grammar-not-lalr1
+        [Fact]
+        public void TestNonLalr1()
+        {
+            //S->aEa | bEb | aFb | bFa
+            //E->e
+            //F->e
+
+            var s = new NonTerminal("S");
+            var e = new NonTerminal("E");
+            var f = new NonTerminal("F");
+            var a = new Token("a");
+            var b = new Token("b");
+            var eToken = new Token("e");
+
+            var rules = new[]
+            {
+                new Rule(Start, s),
+                new Rule(s, a, e, a),
+                new Rule(s, b, e, b),
+                new Rule(s, a, f, b),
+                new Rule(s, b, f, a),
+                new Rule(e, eToken),
+                new Rule(f, eToken),
+            };
+            var nodes = ParserBuilder.CreateParser(rules);
+            var parser = new ParserNodeParser(nodes, Start, this.output.WriteLine);
+
+            var listener = new TreeListener();
+            parser.Parse(new[] { a, eToken, a }, listener);
+
+            this.output.WriteLine(listener.Root.Flatten().ToString());
+            listener.Root.Flatten().ToString()
+                .ShouldEqual("Start(S(a, E(e), a))");
+
+        }
+
         [Fact]
         public void TestExpressionVsStatementListConflict()
         {
