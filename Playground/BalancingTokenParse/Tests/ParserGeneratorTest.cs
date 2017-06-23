@@ -18,6 +18,7 @@ namespace Playground.BalancingTokenParse.Tests
             OPEN_PAREN = new Token("("),
             CLOSE_PAREN = new Token(")"),
             SEMICOLON = new Token(";"),
+            COLON = new Token(":"),
             COMMA = new Token(","),
             LT = new Token("<"),
             GT = new Token(">");
@@ -383,6 +384,50 @@ namespace Playground.BalancingTokenParse.Tests
                     { new Symbol[] { @if, Exp, then, Exp, @else }, rules.Single(r => r.Symbols.Contains(@else)) }
                 }
             );
+        }
+
+        // based on https://www.gnu.org/software/bison/manual/html_node/Mysterious-Conflicts.html#Mysterious-Conflicts
+        [Fact]
+        public void TestBisonMysteriousConflict()
+        {
+            //  def: param_spec return_spec ',';
+            //  param_spec:
+            //  type
+            //| name_list ':' type
+            //;
+            //  return_spec:
+            //  type
+            //| name ':' type
+            //;
+            //  type: "id";
+
+            //  name: "id";
+            //  name_list:
+            //  name
+            //| name ',' name_list
+            //;
+
+            NonTerminal def = new NonTerminal("def"),
+                paramSpec = new NonTerminal("param_spec"),
+                returnSpec = new NonTerminal("return_spec"),
+                type = new NonTerminal("type"),
+                nameList = new NonTerminal("name_list"),
+                name = new NonTerminal("name");
+
+            var rules = new[]
+            {
+                new Rule(def, paramSpec, returnSpec, COMMA),
+                new Rule(paramSpec, type),
+                new Rule(paramSpec, nameList, COLON, type),
+                new Rule(returnSpec, type),
+                new Rule(returnSpec, name, COLON, type),
+                new Rule(type, ID),
+                new Rule(name, ID),
+                new Rule(nameList, name),
+                new Rule(nameList, name, COMMA, nameList),
+            };
+
+            var nodes = ParserBuilder.CreateParser(rules);
         }
     }
 }
