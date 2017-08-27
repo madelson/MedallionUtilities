@@ -101,6 +101,8 @@
     <Compile Include="BalancingTokenParse\ParserNodeParser.cs" />
     <Compile Include="BalancingTokenParse\Rule.cs" />
     <Compile Include="BalancingTokenParse\Symbols.cs" />
+    <Compile Include="ByRef\ByRefList.cs" />
+    <Compile Include="ByRef\IByRefComparer.cs" />
     <Compile Include="Encoding\Base64Encoding.cs" />
     <Compile Include="Encoding\HexEncoding.cs" />
     <Compile Include="Enums\Enums.cs" />
