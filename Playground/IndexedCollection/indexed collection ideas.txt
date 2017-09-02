@@ -1,0 +1,12 @@
+﻿Core collection should be a collection with fast remove/insert by value. Can start as a plain List for perf and switch over to a multi-dictionary
+after the first remove
+
+Can have insertion-order index which keeps a sorted dictionary of long => T, might need to be a bit fancier and keep track of left/right subtree counts for ranges
+
+- start with a "heap", but this is only for when we have 0 indices (just a list)
+- as soon as we add an index, throw away the heap: we don't need it!
+- insertion-order index is a treelist datastructure which maps ulong keys to values. It counts as a sorted index with a ulong key
+- overall need multi-dictionary datastructure as well as multi-sorted-dictionary with left and right subtree counts to provide fast indexed access
+
+
+
